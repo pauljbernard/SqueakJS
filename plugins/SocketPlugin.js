@@ -195,7 +195,7 @@ function SocketPlugin() {
         },
         _httpTunnelUrl: function() {
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          var proto = "wss:";
+          var proto = (location.protocol === "https:") ? "wss:" : "ws:";
           var path = opts.tcpTunnelPath || "/tcp-tunnel";
           return proto + "//" + location.host + path;
         },
@@ -695,7 +695,7 @@ function SocketPlugin() {
 
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
           if (opts.enableTcpTunnel !== false) {
-            var proto = "wss:";
+            var proto = (location.protocol === "https:") ? "wss:" : "ws:";
             var path = opts.tcpTunnelPath || "/tcp-tunnel";
             var url = proto + "//" + location.host + path;
 
@@ -923,7 +923,7 @@ function SocketPlugin() {
         var thisHandle = this;
         try {
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          var proto = "wss:";
+          var proto = (location.protocol === "https:") ? "wss:" : "ws:";
           var path = opts.tcpTunnelPath || "/tcp-tunnel";
           var url = proto + "//" + location.host + path;
           var ws = new WebSocket(url);
