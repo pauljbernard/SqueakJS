@@ -195,9 +195,22 @@ function SocketPlugin() {
         },
         _httpTunnelUrl: function() {
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+          var pathOrUrl = opts.tcpTunnelPath;
+          if (typeof pathOrUrl === "string" && /^(ws|wss):\/\//i.test(pathOrUrl)) return pathOrUrl;
           var proto = (location.protocol === "https:") ? "wss:" : "ws:";
-          var path = opts.tcpTunnelPath || "/tcp-tunnel";
-          return proto + "//" + location.host + path;
+          var base = (document.baseURI || (location.origin + location.pathname));
+          var urlObj;
+          try {
+            urlObj = new URL(base, location.origin);
+          } catch(_) {
+            return proto + "//" + location.host + "/tcp-tunnel";
+          }
+          if (!urlObj.pathname.endsWith("/")) {
+            urlObj.pathname = urlObj.pathname.substring(0, urlObj.pathname.lastIndexOf("/") + 1);
+          }
+          var rel = (typeof pathOrUrl === "string" && pathOrUrl.length) ? pathOrUrl : "tcp-tunnel";
+          var finalPath = rel.charAt(0) === "/" ? rel : (urlObj.pathname + rel);
+          return proto + "//" + location.host + finalPath;
         },
 
         _httpOverTunnel: function(rawRequestBytes) {
@@ -695,9 +708,7 @@ function SocketPlugin() {
 
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
           if (opts.enableTcpTunnel !== false) {
-            var proto = (location.protocol === "https:") ? "wss:" : "ws:";
-            var path = opts.tcpTunnelPath || "/tcp-tunnel";
-            var url = proto + "//" + location.host + path;
+            var url = this._httpTunnelUrl();
 
             var thisHandle = this;
             this.tunnelWS = new WebSocket(url);
@@ -923,9 +934,26 @@ function SocketPlugin() {
         var thisHandle = this;
         try {
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          var proto = (location.protocol === "https:") ? "wss:" : "ws:";
-          var path = opts.tcpTunnelPath || "/tcp-tunnel";
-          var url = proto + "//" + location.host + path;
+          var pathOrUrl = opts.tcpTunnelPath;
+          var url;
+          if (typeof pathOrUrl === "string" && /^(ws|wss):\/\//i.test(pathOrUrl)) {
+            url = pathOrUrl;
+          } else {
+            var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+            var base = (document.baseURI || (location.origin + location.pathname));
+            var baseUrl;
+            try { baseUrl = new URL(base, location.origin); } catch(_) { baseUrl = null; }
+            if (baseUrl) {
+              if (!baseUrl.pathname.endsWith("/")) {
+                baseUrl.pathname = baseUrl.pathname.substring(0, baseUrl.pathname.lastIndexOf("/") + 1);
+              }
+              var rel = (typeof pathOrUrl === "string" && pathOrUrl.length) ? pathOrUrl : "tcp-tunnel";
+              var finalPath = rel.charAt(0) === "/" ? rel : (baseUrl.pathname + rel);
+              url = proto + "//" + location.host + finalPath;
+            } else {
+              url = proto + "//" + location.host + "/tcp-tunnel";
+            }
+          }
           var ws = new WebSocket(url);
           ws.onopen = function() {
             try { ws.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { ws.close(); } catch(_) {} }

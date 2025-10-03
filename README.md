@@ -125,6 +125,14 @@ Wire protocol:
 - Raw data is exchanged as binary WebSocket frames
 - Remote close is signaled via {"t":"rc"}
 
+Path resolution and fallback:
+- tcpTunnelPath can be:
+  - a fully-qualified ws:/wss: URL (advanced), which will be used as-is
+  - an absolute path like "/tcp-tunnel"
+  - a relative path like "tcp-tunnel", resolved against the app’s base path (document.baseURI or the directory of location.pathname)
+- Default is a relative "tcp-tunnel", so when the app is served under a subpath (e.g., "/squeak/"), the tunnel resolves to "/squeak/tcp-tunnel".
+- If the initial tunnel URL fails to upgrade (e.g., 404), the client will retry once against the default absolute "/tcp-tunnel".
+
 Things to work on
 -----------------
 DNS-over-tunnel:
