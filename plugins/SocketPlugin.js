@@ -288,7 +288,7 @@ function SocketPlugin() {
                 }
                 thisHandle._signalReadSemaphore();
               };
-              function tryFallbackOrClose() {
+              function tryFallbackOrClose(evt) {
                 if (!triedFallback) {
                   triedFallback = true;
                   try {
@@ -296,16 +296,17 @@ function SocketPlugin() {
                     var alt = proto + "//" + location.host + "/tcp-tunnel";
                     ws = new WebSocket(alt);
                     bind(ws);
+                    if (evt && evt.preventDefault) try { evt.preventDefault(); } catch(_) {}
                     return true;
                   } catch(_) {}
                 }
                 return false;
               }
-              wsRef.onerror = function() {
-                if (!tryFallbackOrClose()) thisHandle._otherEndClosed();
+              wsRef.onerror = function(evt) {
+                if (!tryFallbackOrClose(evt)) thisHandle._otherEndClosed();
               };
-              wsRef.onclose = function() {
-                if (!tryFallbackOrClose()) {/* no-op */}
+              wsRef.onclose = function(evt) {
+                if (!tryFallbackOrClose(evt)) {/* no-op */}
               };
             }
             bind(ws);
@@ -811,6 +812,7 @@ function SocketPlugin() {
             };
             (function() {
               var triedFallback = false;
+              function detach(ref){ try { ref.onopen = ref.onmessage = ref.onerror = ref.onclose = null; } catch(_) {} }
               function attachHandlers() {
                 thisHandle.tunnelWS.binaryType = "arraybuffer";
                 thisHandle.tunnelPendingConnect = true;
@@ -853,24 +855,26 @@ function SocketPlugin() {
                   thisHandle.responseReceived = true;
                   thisHandle._signalReadSemaphore();
                 };
-                function tryFallbackOrClose() {
+                function tryFallbackOrClose(evt) {
                   if (!thisHandle.tunnelOpen && !triedFallback) {
                     triedFallback = true;
                     try {
+                      detach(thisHandle.tunnelWS);
                       var proto = (location.protocol === "https:") ? "wss:" : "ws:";
                       var alt = proto + "//" + location.host + "/tcp-tunnel";
                       thisHandle.tunnelWS = new WebSocket(alt);
                       attachHandlers();
+                      if (evt && evt.preventDefault) try { evt.preventDefault(); } catch(_) {}
                       return true;
                     } catch(_) {}
                   }
                   return false;
                 }
-                thisHandle.tunnelWS.onerror = function() {
-                  if (!tryFallbackOrClose()) thisHandle._otherEndClosed();
+                thisHandle.tunnelWS.onerror = function(evt) {
+                  if (!tryFallbackOrClose(evt)) thisHandle._otherEndClosed();
                 };
-                thisHandle.tunnelWS.onclose = function() {
-                  if (!tryFallbackOrClose()) thisHandle._otherEndClosed();
+                thisHandle.tunnelWS.onclose = function(evt) {
+                  if (!tryFallbackOrClose(evt)) thisHandle._otherEndClosed();
                 };
               }
               attachHandlers();
@@ -1114,7 +1118,7 @@ function SocketPlugin() {
                   finish();
                 }
               };
-              function tryFallback() {
+              function tryFallback(evt) {
                 if (!opened && !triedFallback) {
                   triedFallback = true;
                   try {
@@ -1122,13 +1126,14 @@ function SocketPlugin() {
                     var alt = proto + "//" + location.host + "/tcp-tunnel";
                     ws = new WebSocket(alt);
                     bind(ws);
+                    if (evt && evt.preventDefault) try { evt.preventDefault(); } catch(_) {}
                     return true;
                   } catch(_) {}
                 }
                 return false;
               }
-              wsRef.onerror = function() { if (!tryFallback()) finish(); };
-              wsRef.onclose = function() { if (!tryFallback()) finish(); };
+              wsRef.onerror = function(evt) { if (!tryFallback(evt)) finish(); };
+              wsRef.onclose = function(evt) { if (!tryFallback(evt)) finish(); };
             };
             bind(ws);
           })();
