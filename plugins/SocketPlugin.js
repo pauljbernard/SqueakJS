@@ -197,6 +197,57 @@ function SocketPlugin() {
           this.webSocket = null;
           this._signalConnSemaphore();
         },
+        _httpTunnelUrl: function() {
+          var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+          var proto = "wss:";
+          var path = opts.tcpTunnelPath || "/tcp-tunnel";
+          return proto + "//" + location.host + path;
+        },
+
+        _httpOverTunnel: function(rawRequestBytes) {
+          var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+          if (opts.enableTcpTunnel === false) {
+            this._otherEndClosed();
+            return;
+          }
+          var url = this._httpTunnelUrl();
+          var thisHandle = this;
+          var ws = new WebSocket(url);
+          ws.binaryType = "arraybuffer";
+          ws.onopen = function() {
+            try {
+              ws.send(JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port }));
+            } catch(e) {
+              try { ws.close(); } catch(_) {}
+              thisHandle._otherEndClosed();
+            }
+          };
+          ws.onmessage = function(event) {
+            if (typeof event.data === "string") {
+              try {
+                var m = JSON.parse(event.data);
+                if (m.t === "ok") {
+                  try { ws.send(rawRequestBytes); } catch(e) { try { ws.close(); } catch(_) {} }
+                } else if (m.t === "rc") {
+                  thisHandle.responseReceived = true;
+                } else if (m.t === "err") {
+                  thisHandle._otherEndClosed();
+                  try { ws.close(); } catch(_) {}
+                }
+              } catch(e) {}
+              return;
+            }
+            var bytes = new Uint8Array(event.data);
+            if (!thisHandle.response || !thisHandle.response.length) {
+              thisHandle.response = [ bytes ];
+            } else {
+              thisHandle.response.push(bytes);
+            }
+            thisHandle._signalReadSemaphore();
+          };
+          ws.onerror = function() { thisHandle._otherEndClosed(); };
+          ws.onclose = function() {};
+        },
 
         _hostAndPort: function() { return this.host + ':' + this.port; },
 
@@ -319,9 +370,6 @@ function SocketPlugin() {
               plugin.needProxy.add(thisHandle._hostAndPort());
             })
             .catch(function (e) {
-              // KLUDGE! This is just a workaround for a broken
-              // proxy server - we should remove it when
-              // crossorigin.me is fixed
               console.warn('Fetch API failed, retrying with XMLHttpRequest');
               thisHandle._performXMLHTTPRequest(targetURL, httpMethod, data, requestLines);
             });
@@ -395,8 +443,21 @@ function SocketPlugin() {
               plugin.needProxy.add(thisHandle._hostAndPort());
             };
             retry.onerror = function() {
-              thisHandle._otherEndClosed();
-              console.error("Failed to download:\n" + url);
+              var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+              if (opts.enableTcpTunnel !== false) {
+                var headerStr = (new TextDecoder('utf-8')).decode(new TextEncoder('utf-8').encode(requestLines[0])) + '\r\n';
+                for (var i = 1; i < requestLines.length; i++) headerStr += requestLines[i].replace(/\r?$/, '') + '\r\n';
+                headerStr += '\r\n';
+                var headerBytes = new TextEncoder('utf-8').encode(headerStr);
+                var totalLen = headerBytes.byteLength + (data ? data.byteLength : 0);
+                var raw = new Uint8Array(totalLen);
+                raw.set(headerBytes, 0);
+                if (data) raw.set(data, headerBytes.byteLength);
+                thisHandle._httpOverTunnel(raw);
+              } else {
+                thisHandle._otherEndClosed();
+                console.error("Failed to download:\n" + url);
+              }
             };
             retry.send(data);
           };
@@ -638,7 +699,7 @@ function SocketPlugin() {
 
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
           if (opts.enableTcpTunnel !== false) {
-            var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+            var proto = "wss:";
             var path = opts.tcpTunnelPath || "/tcp-tunnel";
             var url = proto + "//" + location.host + path;
 
