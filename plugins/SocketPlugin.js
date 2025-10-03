@@ -637,7 +637,7 @@ function SocketPlugin() {
           this.port = port;
 
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          if (opts.enableTcpTunnel !== false) {
+          if (opts.enableTcpTunnel !== false && opts.tcpTunnelEager) {
             var proto = (location.protocol === "https:") ? "wss:" : "ws:";
             var path = opts.tcpTunnelPath || "/tcp-tunnel";
             var url = proto + "//" + location.host + path;
