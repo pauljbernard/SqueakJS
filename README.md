@@ -116,7 +116,8 @@ Server example:
 - Security:
   - Same-origin only (deploy under your app’s origin and use wss in production)
   - Allowlist enforced server-side via TUNNEL_ALLOW_HOSTS and TUNNEL_ALLOW_PORTS
-  - By default all ports are allowed; set TUNNEL_ALLOW_PORTS to restrict (e.g. "80,443"). Set TUNNEL_ALLOW_HOSTS to restrict hosts.
+  - Hosts: default allows all; set TUNNEL_ALLOW_HOSTS to a comma-separated list to restrict, or "*" for wildcard (also allows all).
+  - Ports: default allows all; set TUNNEL_ALLOW_PORTS (e.g., "80,443") to restrict.
 
 Wire protocol:
 - Client sends a JSON text frame: {"t":"c","h":"host","p":port}

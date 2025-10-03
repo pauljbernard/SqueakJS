@@ -10,8 +10,11 @@ const ALLOW_PORTS = (process.env.TUNNEL_ALLOW_PORTS || '').split(',').map(n => p
 
 function hostAllowed(targetHost, req) {
   const originHost = (req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0];
-  if (ALLOW_HOSTS.length) return ALLOW_HOSTS.includes(targetHost);
-  return targetHost === originHost || targetHost === 'localhost' || targetHost === '127.0.0.1';
+  if (ALLOW_HOSTS.length) {
+    if (ALLOW_HOSTS.includes('*')) return true;
+    return ALLOW_HOSTS.includes(targetHost);
+  }
+  return true;
 }
 
 function portAllowed(p) { return ALLOW_PORTS.length === 0 || ALLOW_PORTS.includes(p); }
