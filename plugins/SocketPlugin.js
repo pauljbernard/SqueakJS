@@ -637,7 +637,7 @@ function SocketPlugin() {
           this.port = port;
 
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          if (opts.enableTcpTunnel) {
+          if (opts.enableTcpTunnel !== false) {
             var proto = (location.protocol === "https:") ? "wss:" : "ws:";
             var path = opts.tcpTunnelPath || "/tcp-tunnel";
             var url = proto + "//" + location.host + path;
@@ -773,7 +773,7 @@ function SocketPlugin() {
           var newBytes = data.bytes.subarray(start, end);
 
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          if (opts.enableTcpTunnel && this.tunnelWS) {
+          if ((opts.enableTcpTunnel !== false) && this.tunnelWS) {
             if (!this.tunnelOpen) {
               if (this.sendBuffer === null) {
                 this.sendBuffer = newBytes.slice();

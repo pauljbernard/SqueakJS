@@ -94,8 +94,8 @@ Same-origin TCP tunnel
 ----------------------
 SqueakJS can optionally tunnel TCP-like sockets over a same-origin WebSocket so images can use networking seamlessly in the browser.
 
-Client options (default disabled):
-- enableTcpTunnel: true to enable tunneling
+Client options (enabled by default):
+- enableTcpTunnel: set to false to disable tunneling
 - tcpTunnelPath: WebSocket endpoint path (default "/tcp-tunnel")
 
 Example:
