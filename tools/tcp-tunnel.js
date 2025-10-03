@@ -28,9 +28,35 @@ wss.on('connection', (ws, req) => {
 
   ws.on('message', (msg) => {
     if (!connected) {
+      let asString;
+      try { asString = msg.toString(); } catch(_) { asString = null; }
+      if (asString) {
+        try {
+          const obj = JSON.parse(asString);
+          if (obj && obj.t === 'dns' && typeof obj.h === 'string') {
+            const qname = String(obj.h);
+            const dns = require('dns');
+            dns.resolve4(qname, (err, addresses) => {
+              if (err || !Array.isArray(addresses) || addresses.length === 0) {
+                try { ws.send(JSON.stringify({ t: 'dns', err: String((err && err.code) || 'ENOTFOUND') })); } catch(_) {}
+                return;
+              }
+              const dohLike = {
+                Status: 0,
+                Question: [{ name: qname }],
+                Answer: addresses.map(a => ({ name: qname, type: 1, TTL: 86400, data: a }))
+              };
+              try { ws.send(JSON.stringify({ t: 'dns', r: dohLike })); } catch(_) {}
+            });
+            return;
+          }
+        } catch(_) {
+        }
+      }
+
       let m;
       try {
-        m = JSON.parse(msg.toString());
+        m = JSON.parse(asString || '');
       } catch(e) {
         ws.close();
         return;

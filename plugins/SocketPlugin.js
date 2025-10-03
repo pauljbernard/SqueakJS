@@ -17,16 +17,15 @@
  * See the following site for an explanation of the WebSocket protocol:
  * https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
  *
- * DNS requests are done through DNS over HTTPS (DoH). Quad9 (IP 9.9.9.9) is used
- * as server because it seems to take privacy of users serious. Other servers can
- * be found at https://en.wikipedia.org/wiki/Public_recursive_name_server
+ * DNS requests are resolved via the same-origin TCP-over-WebSocket tunnel server.
+ * This avoids browser CORS/TLS issues and remains transparent to the Smalltalk image.
  */
 
 function SocketPlugin() {
   "use strict";
 
   return {
-    getModuleName: function() { return 'SocketPlugin (http-only)'; },
+    getModuleName: function() { return 'SocketPlugin (http-only, tunnel-enabled)'; },
     interpreterProxy: null,
     primHandler: null,
 
@@ -145,9 +144,6 @@ function SocketPlugin() {
     },
 
     _reverseLookupNameForAddress: function(address) {
-      // Currently public API's for IP to hostname are not standardized yet (like DoH).
-      // Assume most lookup's will be for reversing earlier name to address lookups.
-      // Therefor use the lookup cache and otherwise create a dotted decimals name.
       var thisHandle = this;
       var result = null;
       Object.keys(this.lookupCache).some(function(name) {
@@ -922,66 +918,43 @@ function SocketPlugin() {
         this._signalLookupSemaphore();
       } else {
 
-        // Perform DNS request
-        var dnsQueryURL = "https://9.9.9.9:5053/dns-query?name=" + encodeURIComponent(this.lastLookup) + "&type=A";
+        // Perform DNS request via same-origin tunnel
         var queryStarted = false;
-        if (self.fetch) {
-          var thisHandle = this;
-          var init = {
-            method: "GET",
-            mode: "cors",
-            credentials: "omit",
-            cache: "no-store", // do not use the browser cache for DNS requests (a separate cache is kept)
-            referrer: "no-referrer",
-            referrerPolicy: "no-referrer",
+        var thisHandle = this;
+        try {
+          var url = this._httpTunnelUrl();
+          var ws = new WebSocket(url);
+          ws.onopen = function() {
+            try { ws.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { ws.close(); } catch(_) {} }
           };
-          self.fetch(dnsQueryURL, init)
-            .then(function(response) {
-              return response.json();
-            })
-            .then(function(response) {
-              thisHandle._addAddressFromResponseToLookupCache(response);
-            })
-            .catch(function(error) {
-              console.error("Name lookup failed", error);
-            })
-            .then(function() {
-
-              // If no other lookup is started, signal the receiver (ie resolver) is ready
-              if (lookup === thisHandle.lastLookup) {
-                thisHandle.status = thisHandle.Resolver_Ready;
-                thisHandle._signalLookupSemaphore();
-              }
-            })
-          ;
-          queryStarted = true;
-        } else {
-          var thisHandle = this;
-          var lookupReady = function() {
-
-            // If no other lookup is started, signal the receiver (ie resolver) is ready
+          var finish = function() {
             if (lookup === thisHandle.lastLookup) {
               thisHandle.status = thisHandle.Resolver_Ready;
               thisHandle._signalLookupSemaphore();
             }
+            try { ws.close(); } catch(_) {}
           };
-          var httpRequest = new XMLHttpRequest();
-          httpRequest.open("GET", dnsQueryURL, true);
-          httpRequest.timeout = 2000; // milliseconds
-          httpRequest.responseType = "json";
-          httpRequest.onload = function(oEvent) {
-            thisHandle._addAddressFromResponseToLookupCache(this.response);
-            lookupReady();
+          ws.onmessage = function(ev) {
+            if (typeof ev.data !== "string") return;
+            try {
+              var msg = JSON.parse(ev.data);
+              if (msg && msg.t === "dns") {
+                if (msg.r) {
+                  thisHandle._addAddressFromResponseToLookupCache(msg.r);
+                }
+                finish();
+              }
+            } catch(_) {
+              finish();
+            }
           };
-          httpRequest.onerror = function() {
-            console.error("Name lookup failed", httpRequest.statusText);
-            lookupReady();
-          };
-          httpRequest.send();
-
+          ws.onerror = function() { finish(); };
+          ws.onclose = function() { finish(); };
           queryStarted = true;
+        } catch(e) {
+          console.error("Name lookup failed", e);
         }
-
+ 
         // Mark the receiver (ie resolver) is busy
         if (queryStarted) {
           this.status = this.Resolver_Busy;
