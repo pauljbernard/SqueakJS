@@ -88,7 +88,8 @@ async function serveStatic(req, res) {
     return;
   }
 
-  const requestedPath = path.join(ROOT, pathname);
+  const normalizedPathname = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  const requestedPath = path.resolve(ROOT, `.${normalizedPathname}`);
   if (!withinRoot(requestedPath)) {
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Forbidden');
@@ -144,7 +145,27 @@ async function serveStatic(req, res) {
   stream.pipe(res);
 }
 
+const normalizedTunnelPath = TUNNEL_PATH.startsWith('/') ? TUNNEL_PATH : `/${TUNNEL_PATH}`;
+const tunnelPaths = new Set([normalizedTunnelPath]);
+if (!normalizedTunnelPath.startsWith('/run/')) {
+  tunnelPaths.add(`/run${normalizedTunnelPath}`);
+}
+
 const server = http.createServer((req, res) => {
+  const upgradeHeader = req.headers && typeof req.headers.upgrade === 'string'
+    ? req.headers.upgrade.toLowerCase()
+    : '';
+  if (upgradeHeader === 'websocket') {
+    try {
+      const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+      if (tunnelPaths.has(url.pathname)) {
+        return;
+      }
+    } catch (_) {
+      // fall through to static handling on malformed URLs
+    }
+  }
+
   serveStatic(req, res).catch((err) => {
     console.error('Unhandled error while serving request', err);
     if (!res.headersSent) {
