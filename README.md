@@ -127,6 +127,9 @@ Wire protocol:
 
 Things to work on
 -----------------
+DNS-over-tunnel:
+- DNS name resolution is performed via the same-origin tunnel server, avoiding browser DoH/CORS/TLS issues.
+- Completely transparent to the Smalltalk image; results are cached client-side with TTL as before.
 SqueakJS is intended to run any Squeak image. It can already load any image from the original 1996 Squeak release to the latest Cog-Spur release, including 64-bit and Sista variants. But various pieces (primitives in various plugins) are still missing, in particular 3D graphics and networking (however, see [Croquet][jasmine] which supports both, but should be generalized). Also, we should make pre-Spur 64 bit images load. And, it would be nice to make it work on as many browsers as possible, especially on mobile touch devices.
 
 As for optimizing the way to go is an optimizing JIT compiler. The current JIT is very simple and does not optimize at all, it only eloiminates the interpreter's instruction decoding overhead. Since we can't access or manipulate the JavaScript stack, we might want that compiler to inline as much as possible, but keep the call sequence flat so we can return to the browser at any time. Even better (but potentially more complicated) is actually using the JavaScript stack, just like Eliot's Stack VM uses the C stack. I have done some [advanced JIT mockups][jit]. To make BitBlt fast, we could probably use WASM or even WebGL.
