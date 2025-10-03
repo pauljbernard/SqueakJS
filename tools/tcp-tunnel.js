@@ -1,28 +1,65 @@
 #!/usr/bin/env node
 const http = require('http');
-const WebSocket = require('ws');
+const path = require('path');
 const net = require('net');
 
-const PORT = process.env.TUNNEL_PORT || 8081;
-const PATH = process.env.TUNNEL_PATH || '/tcp-tunnel';
-const ALLOW_HOSTS = (process.env.TUNNEL_ALLOW_HOSTS || '').split(',').map(s => s.trim()).filter(Boolean);
-const ALLOW_PORTS = (process.env.TUNNEL_ALLOW_PORTS || '').split(',').map(n => parseInt(n,10)).filter(n => !isNaN(n));
-
-function hostAllowed(targetHost, req) {
-  const originHost = (req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0];
-  if (ALLOW_HOSTS.length) {
-    if (ALLOW_HOSTS.includes('*')) return true;
-    return ALLOW_HOSTS.includes(targetHost);
+let WebSocket;
+try {
+  WebSocket = require('ws');
+} catch (err) {
+  try {
+    WebSocket = require(path.resolve(__dirname, '../ws/server/node_modules/ws'));
+  } catch (fallbackErr) {
+    err.message += ` (and fallback to bundled ws failed: ${fallbackErr.message})`;
+    throw err;
   }
-  return true;
 }
 
-function portAllowed(p) { return ALLOW_PORTS.length === 0 || ALLOW_PORTS.includes(p); }
+function toList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return String(value)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
-const server = http.createServer();
-const wss = new WebSocket.Server({ server, path: PATH });
+function toPortList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((n) => parseInt(n, 10))
+      .filter((n) => Number.isInteger(n) && n > 0 && n <= 65535);
+  }
+  if (!value) return [];
+  return String(value)
+    .split(',')
+    .map((n) => parseInt(n, 10))
+    .filter((n) => Number.isInteger(n) && n > 0 && n <= 65535);
+}
 
-wss.on('connection', (ws, req) => {
+function attachTcpTunnel(server, options = {}) {
+  const {
+    path = '/tcp-tunnel',
+    allowHosts = [],
+    allowPorts = [],
+  } = options;
+
+  const hosts = toList(allowHosts);
+  const ports = toPortList(allowPorts);
+
+  function hostAllowed(targetHost) {
+    if (!hosts.length) return true;
+    if (hosts.includes('*')) return true;
+    return hosts.includes(targetHost);
+  }
+
+  function portAllowed(p) {
+    return !ports.length || ports.includes(p);
+  }
+
+  const wss = new WebSocket.Server({ server, path });
+
+  wss.on('connection', (ws, req) => {
   let sock = null;
   let connected = false;
 
@@ -69,7 +106,7 @@ wss.on('connection', (ws, req) => {
         ws.close();
         return;
       }
-      if (!hostAllowed(host, req) || !portAllowed(port)) {
+      if (!hostAllowed(host) || !portAllowed(port)) {
         try { ws.send(JSON.stringify({ t: 'err', code: 403, msg: 'forbidden' })); } catch(e) {}
         ws.close();
         return;
@@ -119,6 +156,21 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`TCP tunnel listening http://localhost:${PORT}${PATH}`);
-});
+  return wss;
+}
+
+module.exports = { attachTcpTunnel };
+
+if (require.main === module) {
+  const PORT = process.env.TUNNEL_PORT || 8081;
+  const PATH = process.env.TUNNEL_PATH || '/tcp-tunnel';
+  const ALLOW_HOSTS = toList(process.env.TUNNEL_ALLOW_HOSTS || []);
+  const ALLOW_PORTS = toPortList(process.env.TUNNEL_ALLOW_PORTS || []);
+
+  const server = http.createServer();
+  attachTcpTunnel(server, { path: PATH, allowHosts: ALLOW_HOSTS, allowPorts: ALLOW_PORTS });
+
+  server.listen(PORT, () => {
+    console.log(`TCP tunnel listening http://localhost:${PORT}${PATH}`);
+  });
+}

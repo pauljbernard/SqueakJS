@@ -67,6 +67,12 @@ Installing locally
   npx serve
   ```
   which will run a webserver on port 3000.
+  Or run the bundled demo server (with TCP tunnel support) via
+  ```
+  npm install
+  npm start
+  ```
+  which serves the repository on http://localhost:3000/run/ with a same-origin tunnel at /tcp-tunnel.
 * in a web browser, open http://localhost:3000/run/ and pick one of the images, or drag and drop your own
 
 Now Squeak should be running.
