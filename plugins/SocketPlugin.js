@@ -195,9 +195,22 @@ function SocketPlugin() {
         },
         _httpTunnelUrl: function() {
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+          var pathOrUrl = opts.tcpTunnelPath;
+          if (typeof pathOrUrl === "string" && /^(ws|wss):\/\//i.test(pathOrUrl)) return pathOrUrl;
           var proto = (location.protocol === "https:") ? "wss:" : "ws:";
-          var path = opts.tcpTunnelPath || "/tcp-tunnel";
-          return proto + "//" + location.host + path;
+          var base = (document.baseURI || (location.origin + location.pathname));
+          var urlObj;
+          try {
+            urlObj = new URL(base, location.origin);
+          } catch(_) {
+            return proto + "//" + location.host + "/tcp-tunnel";
+          }
+          if (!urlObj.pathname.endsWith("/")) {
+            urlObj.pathname = urlObj.pathname.substring(0, urlObj.pathname.lastIndexOf("/") + 1);
+          }
+          var rel = (typeof pathOrUrl === "string" && pathOrUrl.length) ? pathOrUrl : "tcp-tunnel";
+          var finalPath = rel.charAt(0) === "/" ? rel : (urlObj.pathname + rel);
+          return proto + "//" + location.host + finalPath;
         },
 
         _httpOverTunnel: function(rawRequestBytes) {
@@ -241,8 +254,62 @@ function SocketPlugin() {
             }
             thisHandle._signalReadSemaphore();
           };
-          ws.onerror = function() { thisHandle._otherEndClosed(); };
-          ws.onclose = function() {};
+          (function() {
+            var triedFallback = false;
+            function bind(wsRef) {
+              wsRef.onopen = function() {
+                try {
+                  wsRef.send(JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port }));
+                } catch(e) {
+                  try { wsRef.close(); } catch(_) {}
+                  thisHandle._otherEndClosed();
+                }
+              };
+              wsRef.onmessage = function(event) {
+                if (typeof event.data === "string") {
+                  try {
+                    var m = JSON.parse(event.data);
+                    if (m.t === "ok") {
+                      try { wsRef.send(rawRequestBytes); } catch(e) { try { wsRef.close(); } catch(_) {} }
+                    } else if (m.t === "rc") {
+                      thisHandle.responseReceived = true;
+                    } else if (m.t === "err") {
+                      thisHandle._otherEndClosed();
+                      try { wsRef.close(); } catch(_) {}
+                    }
+                  } catch(e) {}
+                  return;
+                }
+                var bytes = new Uint8Array(event.data);
+                if (!thisHandle.response || !thisHandle.response.length) {
+                  thisHandle.response = [ bytes ];
+                } else {
+                  thisHandle.response.push(bytes);
+                }
+                thisHandle._signalReadSemaphore();
+              };
+              function tryFallbackOrClose() {
+                if (!triedFallback) {
+                  triedFallback = true;
+                  try {
+                    var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+                    var alt = proto + "//" + location.host + "/tcp-tunnel";
+                    ws = new WebSocket(alt);
+                    bind(ws);
+                    return true;
+                  } catch(_) {}
+                }
+                return false;
+              }
+              wsRef.onerror = function() {
+                if (!tryFallbackOrClose()) thisHandle._otherEndClosed();
+              };
+              wsRef.onclose = function() {
+                if (!tryFallbackOrClose()) {/* no-op */}
+              };
+            }
+            bind(ws);
+          })();
         },
 
         _hostAndPort: function() { return this.host + ':' + this.port; },
@@ -695,9 +762,7 @@ function SocketPlugin() {
 
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
           if (opts.enableTcpTunnel !== false) {
-            var proto = (location.protocol === "https:") ? "wss:" : "ws:";
-            var path = opts.tcpTunnelPath || "/tcp-tunnel";
-            var url = proto + "//" + location.host + path;
+            var url = this._httpTunnelUrl();
 
             var thisHandle = this;
             this.tunnelWS = new WebSocket(url);
@@ -744,12 +809,72 @@ function SocketPlugin() {
               thisHandle.responseReceived = true;
               thisHandle._signalReadSemaphore();
             };
-            this.tunnelWS.onerror = function() {
-              thisHandle._otherEndClosed();
-            };
-            this.tunnelWS.onclose = function() {
-              thisHandle._otherEndClosed();
-            };
+            (function() {
+              var triedFallback = false;
+              function attachHandlers() {
+                thisHandle.tunnelWS.binaryType = "arraybuffer";
+                thisHandle.tunnelPendingConnect = true;
+                thisHandle.tunnelWS.onopen = function() {
+                  var msg = JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port });
+                  thisHandle.tunnelWS.send(msg);
+                };
+                thisHandle.tunnelWS.onmessage = function(event) {
+                  if (typeof event.data === "string") {
+                    try {
+                      var m = JSON.parse(event.data);
+                      if (m.t === "ok") {
+                        thisHandle.tunnelPendingConnect = false;
+                        thisHandle.tunnelOpen = true;
+                        if (thisHandle.status !== plugin.Socket_Connected) {
+                          thisHandle.status = plugin.Socket_Connected;
+                          thisHandle._signalConnSemaphore();
+                          thisHandle._signalWriteSemaphore();
+                        }
+                        if (thisHandle.sendBuffer && thisHandle.sendBuffer.byteLength) {
+                          try { thisHandle.tunnelWS.send(thisHandle.sendBuffer); } catch(e) {}
+                          thisHandle.sendBuffer = null;
+                        }
+                      } else if (m.t === "err") {
+                        thisHandle.tunnelPendingConnect = false;
+                        thisHandle._otherEndClosed();
+                      } else if (m.t === "rc") {
+                        thisHandle.tunnelClosed = true;
+                        thisHandle._otherEndClosed();
+                      }
+                    } catch(e) {}
+                    return;
+                  }
+                  var bytes = new Uint8Array(event.data);
+                  if (!thisHandle.response || !thisHandle.response.length) {
+                    thisHandle.response = [ bytes ];
+                  } else {
+                    thisHandle.response.push(bytes);
+                  }
+                  thisHandle.responseReceived = true;
+                  thisHandle._signalReadSemaphore();
+                };
+                function tryFallbackOrClose() {
+                  if (!thisHandle.tunnelOpen && !triedFallback) {
+                    triedFallback = true;
+                    try {
+                      var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+                      var alt = proto + "//" + location.host + "/tcp-tunnel";
+                      thisHandle.tunnelWS = new WebSocket(alt);
+                      attachHandlers();
+                      return true;
+                    } catch(_) {}
+                  }
+                  return false;
+                }
+                thisHandle.tunnelWS.onerror = function() {
+                  if (!tryFallbackOrClose()) thisHandle._otherEndClosed();
+                };
+                thisHandle.tunnelWS.onclose = function() {
+                  if (!tryFallbackOrClose()) thisHandle._otherEndClosed();
+                };
+              }
+              attachHandlers();
+            })();
             this.status = plugin.Socket_WaitingForConnection;
             this._signalConnSemaphore();
             return;
@@ -923,9 +1048,26 @@ function SocketPlugin() {
         var thisHandle = this;
         try {
           var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          var proto = (location.protocol === "https:") ? "wss:" : "ws:";
-          var path = opts.tcpTunnelPath || "/tcp-tunnel";
-          var url = proto + "//" + location.host + path;
+          var pathOrUrl = opts.tcpTunnelPath;
+          var url;
+          if (typeof pathOrUrl === "string" && /^(ws|wss):\/\//i.test(pathOrUrl)) {
+            url = pathOrUrl;
+          } else {
+            var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+            var base = (document.baseURI || (location.origin + location.pathname));
+            var baseUrl;
+            try { baseUrl = new URL(base, location.origin); } catch(_) { baseUrl = null; }
+            if (baseUrl) {
+              if (!baseUrl.pathname.endsWith("/")) {
+                baseUrl.pathname = baseUrl.pathname.substring(0, baseUrl.pathname.lastIndexOf("/") + 1);
+              }
+              var rel = (typeof pathOrUrl === "string" && pathOrUrl.length) ? pathOrUrl : "tcp-tunnel";
+              var finalPath = rel.charAt(0) === "/" ? rel : (baseUrl.pathname + rel);
+              url = proto + "//" + location.host + finalPath;
+            } else {
+              url = proto + "//" + location.host + "/tcp-tunnel";
+            }
+          }
           var ws = new WebSocket(url);
           ws.onopen = function() {
             try { ws.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { ws.close(); } catch(_) {} }
@@ -951,8 +1093,45 @@ function SocketPlugin() {
               finish();
             }
           };
-          ws.onerror = function() { finish(); };
-          ws.onclose = function() { finish(); };
+          (function() {
+            var triedFallback = false, opened = false;
+            var bind = function(wsRef) {
+              wsRef.onopen = function() {
+                opened = true;
+                try { wsRef.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { wsRef.close(); } catch(_) {} }
+              };
+              wsRef.onmessage = function(ev) {
+                if (typeof ev.data !== "string") return;
+                try {
+                  var msg = JSON.parse(ev.data);
+                  if (msg && msg.t === "dns") {
+                    if (msg.r) {
+                      thisHandle._addAddressFromResponseToLookupCache(msg.r);
+                    }
+                    finish();
+                  }
+                } catch(_) {
+                  finish();
+                }
+              };
+              function tryFallback() {
+                if (!opened && !triedFallback) {
+                  triedFallback = true;
+                  try {
+                    var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+                    var alt = proto + "//" + location.host + "/tcp-tunnel";
+                    ws = new WebSocket(alt);
+                    bind(ws);
+                    return true;
+                  } catch(_) {}
+                }
+                return false;
+              }
+              wsRef.onerror = function() { if (!tryFallback()) finish(); };
+              wsRef.onclose = function() { if (!tryFallback()) finish(); };
+            };
+            bind(ws);
+          })();
           queryStarted = true;
         } catch(e) {
           console.error("Name lookup failed", e);
