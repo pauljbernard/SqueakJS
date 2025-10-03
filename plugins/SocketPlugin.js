@@ -1071,6 +1071,8 @@ function SocketPlugin() {
     primitiveResolverStartNameLookup: function(argCount) {
       if (argCount !== 1) return false;
 
+      var plugin = this;
+
       // Start new lookup, ignoring if one is in progress
       var lookup = this.lastLookup = this.interpreterProxy.stackValue(0).bytesAsString();
 
