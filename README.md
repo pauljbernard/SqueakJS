@@ -72,7 +72,7 @@ Installing locally
   npm install
   npm start
   ```
-  which serves the repository on http://localhost:3000/run/ with a same-origin tunnel at /tcp-tunnel.
+  which serves the repository on http://localhost:3000/run/ with a same-origin tunnel at both /tcp-tunnel and /run/tcp-tunnel, plus an HTTP CONNECT proxy endpoint on the same origin.
 * in a web browser, open http://localhost:3000/run/ and pick one of the images, or drag and drop your own
 
 Now Squeak should be running.
@@ -102,7 +102,8 @@ SqueakJS can tunnel TCP-like sockets over a same-origin WebSocket so images can 
 
 Client options (enabled by default):
 - enableTcpTunnel: set to false to disable tunneling
-- tcpTunnelPath: WebSocket endpoint path (default "/tcp-tunnel")
+- tcpTunnelPath: WebSocket endpoint path (default "/tcp-tunnel"); clients hosted under a subpath like "/run/" will also work out of the box due to the server mounting the tunnel at both /tcp-tunnel and /run/tcp-tunnel
+- proxy: optional HTTP proxy URL; when set to same-origin, HTTPS requests may use the HTTP CONNECT proxy exposed by the demo server
 
 HTTP-over-tunnel fallback:
 - For HTTP(S) requests issued via SocketPlugin’s HTTP path, SqueakJS first uses fetch/XMLHttpRequest (with a proxy retry).
@@ -117,13 +118,13 @@ Example:
 
 Server example:
 - A minimal Node.js tunnel server is provided at tools/tcp-tunnel.js. It exposes a WebSocket endpoint that bridges to a TCP socket on the server.
-- Start it with:
+- The bundled demo server (run/server.js) mounts the WebSocket tunnel on both /tcp-tunnel and /run/tcp-tunnel to support subpath hosting, and also exposes an HTTP CONNECT proxy on the same origin for HTTPS tunneling.
+- Start the standalone tunnel with:
   - TUNNEL_PORT=8081 TUNNEL_PATH=/tcp-tunnel node tools/tcp-tunnel.js
-- Security:
+- Security and allowlists:
   - Same-origin only (deploy under your app’s origin and use wss in production)
-  - Allowlist enforced server-side via TUNNEL_ALLOW_HOSTS and TUNNEL_ALLOW_PORTS
-  - Hosts: default allows all; set TUNNEL_ALLOW_HOSTS to a comma-separated list to restrict, or "*" for wildcard (also allows all).
-  - Ports: default allows all; set TUNNEL_ALLOW_PORTS (e.g., "80,443") to restrict.
+  - Allowlist configurable server-side via TUNNEL_ALLOW_HOSTS and TUNNEL_ALLOW_PORTS
+  - Defaults allow all hosts and ports; set TUNNEL_ALLOW_HOSTS to a comma-separated list to restrict (use "*" to allow all), and TUNNEL_ALLOW_PORTS (e.g., "80,443") to restrict ports.
 
 Wire protocol:
 - Client sends a JSON text frame: {"t":"c","h":"host","p":port}
@@ -137,7 +138,10 @@ Path resolution and fallback:
   - an absolute path like "/tcp-tunnel"
   - a relative path like "tcp-tunnel", resolved against the app’s base path (document.baseURI or the directory of location.pathname)
 - Default is a relative "tcp-tunnel", so when the app is served under a subpath (e.g., "/squeak/"), the tunnel resolves to "/squeak/tcp-tunnel".
-- If the initial tunnel URL fails to upgrade (e.g., 404), the client will retry once against the default absolute "/tcp-tunnel".
+- If the initial tunnel URL fails to upgrade (e.g., 404), the client will retry once against the default absolute "/tcp-tunnel". The demo server accepts both on the same origin (/run/tcp-tunnel and /tcp-tunnel) to make this fallback seamless.
+HTTP CONNECT proxy:
+- The demo server also implements an HTTP CONNECT proxy on the same origin. Point SqueakJS.options.proxy to the same-origin URL (e.g., `http://localhost:3000`) to allow HTTPS requests to tunnel via CONNECT when needed.
+- Defaults allow proxying to any host and port; restrict using TUNNEL_ALLOW_HOSTS and TUNNEL_ALLOW_PORTS in production.
 
 Things to work on
 -----------------

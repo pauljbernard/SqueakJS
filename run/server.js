@@ -175,11 +175,59 @@ const server = http.createServer((req, res) => {
   });
 });
 
+const net = require('net');
+function hostPortAllowed(hostname, port) {
+  const hostEnv = parseList(process.env.TUNNEL_ALLOW_HOSTS || '*');
+  const portEnv = parsePorts(process.env.TUNNEL_ALLOW_PORTS || '');
+  const hostOk = !hostEnv.length || hostEnv.includes('*') || hostEnv.includes(hostname);
+  const portOk = !portEnv.length || portEnv.includes(port);
+  return hostOk && portOk;
+}
+server.on('connect', (req, clientSocket, head) => {
+  const hp = String(req.url || '');
+  const [host, portStr] = hp.split(':');
+  const port = parseInt(portStr, 10);
+
+  if (!host || !Number.isInteger(port) || port <= 0 || port > 65535 || !hostPortAllowed(host, port)) {
+    try { clientSocket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); } catch (_) {}
+    try { clientSocket.destroy(); } catch (_) {}
+    return;
+  }
+
+  const upstream = net.connect(port, host, () => {
+    try { clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n'); } catch (_) {}
+    if (head && head.length) upstream.write(head);
+    clientSocket.pipe(upstream);
+    upstream.pipe(clientSocket);
+  });
+
+  const closeBoth = () => {
+    try { upstream.destroy(); } catch (_) {}
+    try { clientSocket.destroy(); } catch (_) {}
+  };
+  upstream.on('error', closeBoth);
+  clientSocket.on('error', closeBoth);
+  upstream.on('close', closeBoth);
+  clientSocket.on('close', closeBoth);
+});
+
 attachTcpTunnel(server, {
   path: TUNNEL_PATH,
   allowHosts: parseList(ALLOW_HOSTS),
   allowPorts: parsePorts(ALLOW_PORTS),
 });
+{
+  const altPath = normalizedTunnelPath.startsWith('/run/')
+    ? normalizedTunnelPath
+    : `/run${normalizedTunnelPath}`;
+  if (altPath !== TUNNEL_PATH) {
+    attachTcpTunnel(server, {
+      path: altPath,
+      allowHosts: parseList(ALLOW_HOSTS),
+      allowPorts: parsePorts(ALLOW_PORTS),
+    });
+  }
+}
 
 server.listen(PORT, HOST, () => {
   const hostDisplay = HOST === '0.0.0.0' ? 'localhost' : HOST;
