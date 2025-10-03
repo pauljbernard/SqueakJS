@@ -21,7 +21,7 @@
     "access": "public"
   },
   "scripts": {
-    "start": "http-server -o run/",
+    "start": "node run/server.js",
     "dev": "http-server",
     "build:cleanup": "rimraf dist",
     "build:bundle": "rollup squeak.js --file dist/squeak_bundle.js --format iife && rollup squeak_headless.js --file dist/squeak_headless_bundle.js",
