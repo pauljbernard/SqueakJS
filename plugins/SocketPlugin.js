@@ -32,6 +32,9 @@ function SocketPlugin() {
     handleCounter: 0,
     needProxy: new Set(),
 
+    tcpTunnelUnavailable: false,
+    tcpTunnelFailureReason: null,
+
     // DNS Lookup
     // Cache elements: key is name, value is { address: 1.2.3.4, validUntil: Date.now() + 30000 }
     status: 0, // Resolver_Uninitialized,
@@ -66,6 +69,20 @@ function SocketPlugin() {
     },
 
     _signalLookupSemaphore: function() { this._signalSemaphore(this.lookupSemaIdx); },
+
+    _isTunnelEnabled: function() {
+      var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+      return opts.enableTcpTunnel !== false && !this.tcpTunnelUnavailable;
+    },
+
+    _disableTunnel: function(reason) {
+      if (this.tcpTunnelUnavailable) return;
+      this.tcpTunnelUnavailable = true;
+      this.tcpTunnelFailureReason = reason || null;
+      try {
+        console.warn("Disabling TCP tunnel fallback" + (reason ? ": " + reason : "."));
+      } catch(_) {}
+    },
 
     _getAddressFromLookupCache: function(name, skipExpirationCheck) {
       if (name) {
@@ -191,6 +208,13 @@ function SocketPlugin() {
         _otherEndClosed: function() {
           this.status = plugin.Socket_OtherEndClosed;
           this.webSocket = null;
+          if (this.tunnelWS) {
+            try { this.tunnelWS.onopen = this.tunnelWS.onmessage = this.tunnelWS.onerror = this.tunnelWS.onclose = null; } catch(_) {}
+            try { this.tunnelWS.close(); } catch(_) {}
+          }
+          this.tunnelWS = null;
+          this.tunnelOpen = false;
+          this.tunnelPendingConnect = false;
           this._signalConnSemaphore();
         },
         _httpTunnelUrl: function() {
@@ -214,8 +238,7 @@ function SocketPlugin() {
         },
 
         _httpOverTunnel: function(rawRequestBytes) {
-          var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          if (opts.enableTcpTunnel === false) {
+          if (!plugin._isTunnelEnabled()) {
             this._otherEndClosed();
             return;
           }
@@ -256,8 +279,10 @@ function SocketPlugin() {
           };
           (function() {
             var triedFallback = false;
+            var opened = false;
             function bind(wsRef) {
               wsRef.onopen = function() {
+                opened = true;
                 try {
                   wsRef.send(JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port }));
                 } catch(e) {
@@ -303,10 +328,15 @@ function SocketPlugin() {
                 return false;
               }
               wsRef.onerror = function(evt) {
-                if (!tryFallbackOrClose(evt)) thisHandle._otherEndClosed();
+                if (!tryFallbackOrClose(evt)) {
+                  if (!opened) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                  thisHandle._otherEndClosed();
+                }
               };
               wsRef.onclose = function(evt) {
-                if (!tryFallbackOrClose(evt)) {/* no-op */}
+                if (!tryFallbackOrClose(evt)) {
+                  if (!opened) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                }
               };
             }
             bind(ws);
@@ -507,8 +537,7 @@ function SocketPlugin() {
               plugin.needProxy.add(thisHandle._hostAndPort());
             };
             retry.onerror = function() {
-              var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-              if (opts.enableTcpTunnel !== false) {
+              if (plugin._isTunnelEnabled()) {
                 var headerStr = (new TextDecoder('utf-8')).decode(new TextEncoder('utf-8').encode(requestLines[0])) + '\r\n';
                 for (var i = 1; i < requestLines.length; i++) headerStr += requestLines[i].replace(/\r?$/, '') + '\r\n';
                 headerStr += '\r\n';
@@ -761,14 +790,14 @@ function SocketPlugin() {
           this.host = plugin._reverseLookupNameForAddress(hostAddress);
           this.port = port;
 
-          var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          if (opts.enableTcpTunnel !== false) {
+          if (plugin._isTunnelEnabled()) {
             var url = this._httpTunnelUrl();
 
             var thisHandle = this;
             this.tunnelWS = new WebSocket(url);
             this.tunnelWS.binaryType = "arraybuffer";
             this.tunnelPendingConnect = true;
+            this.tunnelOpen = false;
 
             this.tunnelWS.onopen = function() {
               var msg = JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port });
@@ -871,10 +900,16 @@ function SocketPlugin() {
                   return false;
                 }
                 thisHandle.tunnelWS.onerror = function(evt) {
-                  if (!tryFallbackOrClose(evt)) thisHandle._otherEndClosed();
+                  if (!tryFallbackOrClose(evt)) {
+                    if (!thisHandle.tunnelOpen && thisHandle.tunnelPendingConnect) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                    thisHandle._otherEndClosed();
+                  }
                 };
                 thisHandle.tunnelWS.onclose = function(evt) {
-                  if (!tryFallbackOrClose(evt)) thisHandle._otherEndClosed();
+                  if (!tryFallbackOrClose(evt)) {
+                    if (!thisHandle.tunnelOpen && thisHandle.tunnelPendingConnect) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                    thisHandle._otherEndClosed();
+                  }
                 };
               }
               attachHandlers();
@@ -958,8 +993,7 @@ function SocketPlugin() {
           this.lastSend = Date.now();
           var newBytes = data.bytes.subarray(start, end);
 
-          var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          if ((opts.enableTcpTunnel !== false) && this.tunnelWS) {
+          if (plugin._isTunnelEnabled() && this.tunnelWS) {
             if (!this.tunnelOpen) {
               if (this.sendBuffer === null) {
                 this.sendBuffer = newBytes.slice();
@@ -1048,104 +1082,119 @@ function SocketPlugin() {
       } else {
 
         // Perform DNS request via same-origin tunnel
-        var queryStarted = false;
-        var thisHandle = this;
-        try {
-          var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
-          var pathOrUrl = opts.tcpTunnelPath;
-          var url;
-          if (typeof pathOrUrl === "string" && /^(ws|wss):\/\//i.test(pathOrUrl)) {
-            url = pathOrUrl;
-          } else {
-            var proto = (location.protocol === "https:") ? "wss:" : "ws:";
-            var base = (document.baseURI || (location.origin + location.pathname));
-            var baseUrl;
-            try { baseUrl = new URL(base, location.origin); } catch(_) { baseUrl = null; }
-            if (baseUrl) {
-              if (!baseUrl.pathname.endsWith("/")) {
-                baseUrl.pathname = baseUrl.pathname.substring(0, baseUrl.pathname.lastIndexOf("/") + 1);
-              }
-              var rel = (typeof pathOrUrl === "string" && pathOrUrl.length) ? pathOrUrl : "tcp-tunnel";
-              var finalPath = rel.charAt(0) === "/" ? rel : (baseUrl.pathname + rel);
-              url = proto + "//" + location.host + finalPath;
+        if (!plugin._isTunnelEnabled()) {
+          this.status = this.Resolver_Ready;
+          this._signalLookupSemaphore();
+        } else {
+          var queryStarted = false;
+          var thisHandle = this;
+          try {
+            var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+            var pathOrUrl = opts.tcpTunnelPath;
+            var url;
+            if (typeof pathOrUrl === "string" && /^(ws|wss):\/\//i.test(pathOrUrl)) {
+              url = pathOrUrl;
             } else {
-              url = proto + "//" + location.host + "/tcp-tunnel";
-            }
-          }
-          var ws = new WebSocket(url);
-          ws.onopen = function() {
-            try { ws.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { ws.close(); } catch(_) {} }
-          };
-          var finish = function() {
-            if (lookup === thisHandle.lastLookup) {
-              thisHandle.status = thisHandle.Resolver_Ready;
-              thisHandle._signalLookupSemaphore();
-            }
-            try { ws.close(); } catch(_) {}
-          };
-          ws.onmessage = function(ev) {
-            if (typeof ev.data !== "string") return;
-            try {
-              var msg = JSON.parse(ev.data);
-              if (msg && msg.t === "dns") {
-                if (msg.r) {
-                  thisHandle._addAddressFromResponseToLookupCache(msg.r);
+              var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+              var base = (document.baseURI || (location.origin + location.pathname));
+              var baseUrl;
+              try { baseUrl = new URL(base, location.origin); } catch(_) { baseUrl = null; }
+              if (baseUrl) {
+                if (!baseUrl.pathname.endsWith("/")) {
+                  baseUrl.pathname = baseUrl.pathname.substring(0, baseUrl.pathname.lastIndexOf("/") + 1);
                 }
-                finish();
+                var rel = (typeof pathOrUrl === "string" && pathOrUrl.length) ? pathOrUrl : "tcp-tunnel";
+                var finalPath = rel.charAt(0) === "/" ? rel : (baseUrl.pathname + rel);
+                url = proto + "//" + location.host + finalPath;
+              } else {
+                url = proto + "//" + location.host + "/tcp-tunnel";
               }
-            } catch(_) {
-              finish();
             }
-          };
-          (function() {
-            var triedFallback = false, opened = false;
-            var bind = function(wsRef) {
-              wsRef.onopen = function() {
-                opened = true;
-                try { wsRef.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { wsRef.close(); } catch(_) {} }
-              };
-              wsRef.onmessage = function(ev) {
-                if (typeof ev.data !== "string") return;
-                try {
-                  var msg = JSON.parse(ev.data);
-                  if (msg && msg.t === "dns") {
-                    if (msg.r) {
-                      thisHandle._addAddressFromResponseToLookupCache(msg.r);
-                    }
-                    finish();
+            var ws = new WebSocket(url);
+            ws.onopen = function() {
+              try { ws.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { ws.close(); } catch(_) {} }
+            };
+            var finish = function() {
+              if (lookup === thisHandle.lastLookup) {
+                thisHandle.status = thisHandle.Resolver_Ready;
+                thisHandle._signalLookupSemaphore();
+              }
+              try { ws.close(); } catch(_) {}
+            };
+            ws.onmessage = function(ev) {
+              if (typeof ev.data !== "string") return;
+              try {
+                var msg = JSON.parse(ev.data);
+                if (msg && msg.t === "dns") {
+                  if (msg.r) {
+                    thisHandle._addAddressFromResponseToLookupCache(msg.r);
                   }
-                } catch(_) {
                   finish();
                 }
-              };
-              function tryFallback(evt) {
-                if (!opened && !triedFallback) {
-                  triedFallback = true;
-                  try {
-                    var proto = (location.protocol === "https:") ? "wss:" : "ws:";
-                    var alt = proto + "//" + location.host + "/tcp-tunnel";
-                    ws = new WebSocket(alt);
-                    bind(ws);
-                    if (evt && evt.preventDefault) try { evt.preventDefault(); } catch(_) {}
-                    return true;
-                  } catch(_) {}
-                }
-                return false;
+              } catch(_) {
+                finish();
               }
-              wsRef.onerror = function(evt) { if (!tryFallback(evt)) finish(); };
-              wsRef.onclose = function(evt) { if (!tryFallback(evt)) finish(); };
             };
-            bind(ws);
-          })();
-          queryStarted = true;
+            (function() {
+              var triedFallback = false, opened = false;
+              var bind = function(wsRef) {
+                wsRef.onopen = function() {
+                  opened = true;
+                  try { wsRef.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { wsRef.close(); } catch(_) {} }
+                };
+                wsRef.onmessage = function(ev) {
+                  if (typeof ev.data !== "string") return;
+                  try {
+                    var msg = JSON.parse(ev.data);
+                    if (msg && msg.t === "dns") {
+                      if (msg.r) {
+                        thisHandle._addAddressFromResponseToLookupCache(msg.r);
+                      }
+                      finish();
+                    }
+                  } catch(_) {
+                    finish();
+                  }
+                };
+                function tryFallback(evt) {
+                  if (!opened && !triedFallback) {
+                    triedFallback = true;
+                    try {
+                      var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+                      var alt = proto + "//" + location.host + "/tcp-tunnel";
+                      ws = new WebSocket(alt);
+                      bind(ws);
+                      if (evt && evt.preventDefault) try { evt.preventDefault(); } catch(_) {}
+                      return true;
+                    } catch(_) {}
+                  }
+                  return false;
+                }
+                wsRef.onerror = function(evt) {
+                  if (!tryFallback(evt)) {
+                    if (!opened) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                    finish();
+                  }
+                };
+                wsRef.onclose = function(evt) {
+                  if (!tryFallback(evt)) {
+                    if (!opened) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                    finish();
+                  }
+                };
+              };
+              bind(ws);
+            })();
+            queryStarted = true;
         } catch(e) {
           console.error("Name lookup failed", e);
         }
- 
+
         // Mark the receiver (ie resolver) is busy
         if (queryStarted) {
           this.status = this.Resolver_Busy;
           this._signalLookupSemaphore();
+        }
         }
       }
 
