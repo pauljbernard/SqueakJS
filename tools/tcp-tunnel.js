@@ -6,7 +6,7 @@ const net = require('net');
 const PORT = process.env.TUNNEL_PORT || 8081;
 const PATH = process.env.TUNNEL_PATH || '/tcp-tunnel';
 const ALLOW_HOSTS = (process.env.TUNNEL_ALLOW_HOSTS || '').split(',').map(s => s.trim()).filter(Boolean);
-const ALLOW_PORTS = (process.env.TUNNEL_ALLOW_PORTS || '80,443').split(',').map(n => parseInt(n,10)).filter(n => !isNaN(n));
+const ALLOW_PORTS = (process.env.TUNNEL_ALLOW_PORTS || '').split(',').map(n => parseInt(n,10)).filter(n => !isNaN(n));
 
 function hostAllowed(targetHost, req) {
   const originHost = (req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0];
@@ -14,7 +14,7 @@ function hostAllowed(targetHost, req) {
   return targetHost === originHost || targetHost === 'localhost' || targetHost === '127.0.0.1';
 }
 
-function portAllowed(p) { return ALLOW_PORTS.includes(p); }
+function portAllowed(p) { return ALLOW_PORTS.length === 0 || ALLOW_PORTS.includes(p); }
 
 const server = http.createServer();
 const wss = new WebSocket.Server({ server, path: PATH });

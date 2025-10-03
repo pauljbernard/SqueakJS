@@ -92,11 +92,19 @@ Contributions are very welcome!
 
 Same-origin TCP tunnel
 ----------------------
-SqueakJS can optionally tunnel TCP-like sockets over a same-origin WebSocket so images can use networking seamlessly in the browser.
+SqueakJS can tunnel TCP-like sockets over a same-origin WebSocket so images can use networking seamlessly in the browser.
 
 Client options (enabled by default):
 - enableTcpTunnel: set to false to disable tunneling
 - tcpTunnelPath: WebSocket endpoint path (default "/tcp-tunnel")
+
+HTTP-over-tunnel fallback:
+- For HTTP(S) requests issued via SocketPlugin’s HTTP path, SqueakJS first uses fetch/XMLHttpRequest (with a proxy retry).
+- If those fail and tunneling is enabled, SqueakJS automatically falls back to sending the raw HTTP request over the same-origin tunnel and streams the response back.
+- This makes Smalltalk image self-updates work seamlessly without CORS changes.
+
+Same-origin and protocol:
+- The tunnel WebSocket always targets the app’s origin host:port and uses the same scheme (https -> wss, http -> ws).
 
 Example:
 - SqueakJS.runSqueak(imageUrl, canvas, { enableTcpTunnel: true, tcpTunnelPath: "/tcp-tunnel" })
@@ -108,7 +116,7 @@ Server example:
 - Security:
   - Same-origin only (deploy under your app’s origin and use wss in production)
   - Allowlist enforced server-side via TUNNEL_ALLOW_HOSTS and TUNNEL_ALLOW_PORTS
-  - Defaults allow the origin host and localhost, and ports 80/443
+  - By default all ports are allowed; set TUNNEL_ALLOW_PORTS to restrict (e.g. "80,443"). Set TUNNEL_ALLOW_HOSTS to restrict hosts.
 
 Wire protocol:
 - Client sends a JSON text frame: {"t":"c","h":"host","p":port}
