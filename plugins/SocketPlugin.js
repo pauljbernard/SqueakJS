@@ -173,6 +173,11 @@ function SocketPlugin() {
         writeSemaIndex: writeSemaIdx,
 
         webSocket: null,
+        tunnelWS: null,
+        tunnelOpen: false,
+        tunnelClosed: false,
+        tunnelPendingConnect: false,
+
 
         sendBuffer: null,
         sendTimeout: null,
@@ -630,9 +635,72 @@ function SocketPlugin() {
           this.hostAddress = hostAddress;
           this.host = plugin._reverseLookupNameForAddress(hostAddress);
           this.port = port;
+
+          var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+          if (opts.enableTcpTunnel) {
+            var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+            var path = opts.tcpTunnelPath || "/tcp-tunnel";
+            var url = proto + "//" + location.host + path;
+
+            var thisHandle = this;
+            this.tunnelWS = new WebSocket(url);
+            this.tunnelWS.binaryType = "arraybuffer";
+            this.tunnelPendingConnect = true;
+
+            this.tunnelWS.onopen = function() {
+              var msg = JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port });
+              thisHandle.tunnelWS.send(msg);
+            };
+            this.tunnelWS.onmessage = function(event) {
+              if (typeof event.data === "string") {
+                try {
+                  var m = JSON.parse(event.data);
+                  if (m.t === "ok") {
+                    thisHandle.tunnelPendingConnect = false;
+                    thisHandle.tunnelOpen = true;
+                    if (thisHandle.status !== plugin.Socket_Connected) {
+                      thisHandle.status = plugin.Socket_Connected;
+                      thisHandle._signalConnSemaphore();
+                      thisHandle._signalWriteSemaphore();
+                    }
+                    if (thisHandle.sendBuffer && thisHandle.sendBuffer.byteLength) {
+                      try { thisHandle.tunnelWS.send(thisHandle.sendBuffer); } catch(e) {}
+                      thisHandle.sendBuffer = null;
+                    }
+                  } else if (m.t === "err") {
+                    thisHandle.tunnelPendingConnect = false;
+                    thisHandle._otherEndClosed();
+                  } else if (m.t === "rc") {
+                    thisHandle.tunnelClosed = true;
+                    thisHandle._otherEndClosed();
+                  }
+                } catch(e) {
+                }
+                return;
+              }
+              var bytes = new Uint8Array(event.data);
+              if (!thisHandle.response || !thisHandle.response.length) {
+                thisHandle.response = [ bytes ];
+              } else {
+                thisHandle.response.push(bytes);
+              }
+              thisHandle.responseReceived = true;
+              thisHandle._signalReadSemaphore();
+            };
+            this.tunnelWS.onerror = function() {
+              thisHandle._otherEndClosed();
+            };
+            this.tunnelWS.onclose = function() {
+              thisHandle._otherEndClosed();
+            };
+            this.status = plugin.Socket_WaitingForConnection;
+            this._signalConnSemaphore();
+            return;
+          }
+
           this.status = plugin.Socket_Connected;
           this._signalConnSemaphore();
-          this._signalWriteSemaphore(); // Immediately ready to write
+          this._signalWriteSemaphore();
         },
 
         close: function() {
@@ -642,6 +710,10 @@ function SocketPlugin() {
             if (this.webSocket) {
               this.webSocket.close();
               this.webSocket = null;
+            }
+            if (this.tunnelWS) {
+              this.tunnelWS.close();
+              this.tunnelWS = null;
             }
             this.status = plugin.Socket_Unconnected;
             this._signalConnSemaphore();
@@ -686,7 +758,7 @@ function SocketPlugin() {
           } else {
             this.response.shift();
           }
-          if (this.responseReceived && this.response.length === 0 && !this.webSocket) {
+          if (this.responseReceived && this.response.length === 0 && !this.webSocket && !this.tunnelWS) {
             this.responseSentCompletly = true;
           }
 
@@ -699,8 +771,38 @@ function SocketPlugin() {
           }
           this.lastSend = Date.now();
           var newBytes = data.bytes.subarray(start, end);
+
+          var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+          if (opts.enableTcpTunnel && this.tunnelWS) {
+            if (!this.tunnelOpen) {
+              if (this.sendBuffer === null) {
+                this.sendBuffer = newBytes.slice();
+              } else {
+                var newLen = this.sendBuffer.byteLength + newBytes.byteLength;
+                var nb = new Uint8Array(newLen);
+                nb.set(this.sendBuffer, 0);
+                nb.set(newBytes, this.sendBuffer.byteLength);
+                this.sendBuffer = nb;
+              }
+              var thisHandle = this;
+              this.sendTimeout = self.setTimeout(function() {
+                if (thisHandle.tunnelOpen && thisHandle.sendBuffer && thisHandle.sendBuffer.byteLength) {
+                  try { thisHandle.tunnelWS.send(thisHandle.sendBuffer); } catch(e) {}
+                  thisHandle.sendBuffer = null;
+                }
+              }, 50);
+              return newBytes.byteLength;
+            }
+            try {
+              this.tunnelWS.send(newBytes);
+            } catch(e) {
+              this._otherEndClosed();
+              return 0;
+            }
+            return newBytes.byteLength;
+          }
+
           if (this.sendBuffer === null) {
-            // Make copy of buffer otherwise the stream buffer will overwrite it on next call (inside Smalltalk image)
             this.sendBuffer = newBytes.slice();
           } else {
             var newLength = this.sendBuffer.byteLength + newBytes.byteLength;
@@ -709,7 +811,6 @@ function SocketPlugin() {
             newBuffer.set(newBytes, this.sendBuffer.byteLength);
             this.sendBuffer = newBuffer;
           }
-          // Give image some time to send more data before performing requests
           this.sendTimeout = self.setTimeout(this._performRequest.bind(this), 50);
           return newBytes.byteLength;
         }

@@ -90,6 +90,32 @@ How to share your changes
 
 Contributions are very welcome!
 
+Same-origin TCP tunnel
+----------------------
+SqueakJS can optionally tunnel TCP-like sockets over a same-origin WebSocket so images can use networking seamlessly in the browser.
+
+Client options (default disabled):
+- enableTcpTunnel: true to enable tunneling
+- tcpTunnelPath: WebSocket endpoint path (default "/tcp-tunnel")
+
+Example:
+- SqueakJS.runSqueak(imageUrl, canvas, { enableTcpTunnel: true, tcpTunnelPath: "/tcp-tunnel" })
+
+Server example:
+- A minimal Node.js tunnel server is provided at tools/tcp-tunnel.js. It exposes a WebSocket endpoint that bridges to a TCP socket on the server.
+- Start it with:
+  - TUNNEL_PORT=8081 TUNNEL_PATH=/tcp-tunnel node tools/tcp-tunnel.js
+- Security:
+  - Same-origin only (deploy under your app’s origin and use wss in production)
+  - Allowlist enforced server-side via TUNNEL_ALLOW_HOSTS and TUNNEL_ALLOW_PORTS
+  - Defaults allow the origin host and localhost, and ports 80/443
+
+Wire protocol:
+- Client sends a JSON text frame: {"t":"c","h":"host","p":port}
+- Server replies with {"t":"ok"} or {"t":"err",...}
+- Raw data is exchanged as binary WebSocket frames
+- Remote close is signaled via {"t":"rc"}
+
 Things to work on
 -----------------
 SqueakJS is intended to run any Squeak image. It can already load any image from the original 1996 Squeak release to the latest Cog-Spur release, including 64-bit and Sista variants. But various pieces (primitives in various plugins) are still missing, in particular 3D graphics and networking (however, see [Croquet][jasmine] which supports both, but should be generalized). Also, we should make pre-Spur 64 bit images load. And, it would be nice to make it work on as many browsers as possible, especially on mobile touch devices.
