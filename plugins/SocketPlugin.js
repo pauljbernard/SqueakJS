@@ -922,7 +922,10 @@ function SocketPlugin() {
         var queryStarted = false;
         var thisHandle = this;
         try {
-          var url = this._httpTunnelUrl();
+          var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+          var proto = "wss:";
+          var path = opts.tcpTunnelPath || "/tcp-tunnel";
+          var url = proto + "//" + location.host + path;
           var ws = new WebSocket(url);
           ws.onopen = function() {
             try { ws.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { ws.close(); } catch(_) {} }
