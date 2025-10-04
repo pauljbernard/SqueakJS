@@ -3,7 +3,7 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const { URL } = require('url');
-const { attachTcpTunnel } = require('../tools/tcp-tunnel');
+const { attachTcpTunnelNoServer } = require('../tools/tcp-tunnel');
 
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT = parseInt(process.env.PORT, 10) || 3000;
@@ -158,11 +158,11 @@ const server = http.createServer((req, res) => {
   if (upgradeHeader === 'websocket') {
     try {
       const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
-      if (tunnelPaths.has(url.pathname)) {
+      const pathname = url.pathname.endsWith('/') && url.pathname.length > 1 ? url.pathname.slice(0, -1) : url.pathname;
+      if (tunnelPaths.has(pathname)) {
         return;
       }
     } catch (_) {
-      // fall through to static handling on malformed URLs
     }
   }
 
@@ -211,23 +211,11 @@ server.on('connect', (req, clientSocket, head) => {
   clientSocket.on('close', closeBoth);
 });
 
-attachTcpTunnel(server, {
-  path: TUNNEL_PATH,
+attachTcpTunnelNoServer(server, {
+  paths: Array.from(tunnelPaths),
   allowHosts: parseList(ALLOW_HOSTS),
   allowPorts: parsePorts(ALLOW_PORTS),
 });
-{
-  const altPath = normalizedTunnelPath.startsWith('/run/')
-    ? normalizedTunnelPath
-    : `/run${normalizedTunnelPath}`;
-  if (altPath !== TUNNEL_PATH) {
-    attachTcpTunnel(server, {
-      path: altPath,
-      allowHosts: parseList(ALLOW_HOSTS),
-      allowPorts: parsePorts(ALLOW_PORTS),
-    });
-  }
-}
 
 server.listen(PORT, HOST, () => {
   const hostDisplay = HOST === '0.0.0.0' ? 'localhost' : HOST;
