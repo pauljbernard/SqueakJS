@@ -1376,6 +1376,13 @@ function SocketPlugin() {
       this.interpreterProxy.popthenPush(argCount + 1, res);
       return true;
     },
+    primitiveResolverHostNameSize: function(argCount) {
+      if (argCount !== 1) return false;
+      var name = this.lastLookup || '';
+      var len = (typeof name === 'string') ? name.length : 0;
+      this.interpreterProxy.popthenPush(argCount + 1, len);
+      return true;
+    },
 
     primitiveSocketSendDone: function(argCount) {
       if (argCount !== 1) return false;
