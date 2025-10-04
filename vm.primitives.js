@@ -260,7 +260,7 @@ Object.subclass('Squeak.Primitives',
             case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
                 break;  // fail
             case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
-                else this.vm.warnOnce("missing primitive: 163 (primitiveGetImmutability)"); return false;
+                else return this.popNandPushIfOK(argCount+1, this.vm.falseObj);
             case 164: return this.popNandPushIfOK(argCount+1, this.vm.trueObj); // Fake primitiveSetImmutability
             case 165:
             case 166: return this.primitiveIntegerAtAndPut(argCount);
@@ -390,8 +390,11 @@ Object.subclass('Squeak.Primitives',
                 else return this.popNandPushIfOK(argCount+1, this.microsecondClockLocal());
             case 242: if (this.oldPrims) break; // unused
                 else return this.primitiveSignalAtUTCMicroseconds(argCount);
-            case 243: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
-                else this.vm.warnOnce("missing primitive: 243 (primitiveUpdateTimeZone)"); return false;
+            case 243: {
+                var minsWest = new Date().getTimezoneOffset();
+                var minsEast = -minsWest;
+                return this.popNandPushIntIfOK(argCount+1, minsEast);
+            }
             case 244: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
             case 245: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
             case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
@@ -421,7 +424,7 @@ Object.subclass('Squeak.Primitives',
             case 571: return this.primitiveUnloadModule(argCount);
             case 572: return this.primitiveListBuiltinModule(argCount);
             case 573: return this.primitiveListLoadedModule(argCount);
-            case 575: this.vm.warnOnce("missing primitive: 575 (primitiveHighBit)"); return false;
+            case 575: { var v = this.stackInteger(0); var res = v === 0 ? 0 : (Math.floor(Math.log2(Math.abs(v))) + 1); return this.popNandPushIntIfOK(argCount+1, res); }
             // this is not really a primitive, see findSelectorInClass()
             case 576: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod);
             case 578: this.vm.warnOnce("missing primitive: 578 (primitiveSuspendAndBackupPC)"); return false; // see bit 5 of vmParameterAt: 65
@@ -2245,5 +2248,87 @@ Object.subclass('Squeak.Primitives',
         ];
         this.popNandPushIfOK(argCount + 1, this.makeStArray(timeAndOffset));
         return true;
+    },
+});
+Object.extend(Squeak.Primitives.prototype, 'browser_primitives', {
+    js_primitiveLanguage: function(argCount) {
+        var lang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US';
+        var two = (lang || 'en').split('-')[0] || 'en';
+        return this.popNandPushIfOK(argCount+1, this.makeStString(two));
+    },
+    js_primitiveCountry: function(argCount) {
+        var region = '';
+        try {
+            if (typeof Intl !== 'undefined' && typeof Intl.Locale !== 'undefined') {
+                var loc = new Intl.Locale((typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US');
+                region = (loc.maximize().region || '') || '';
+            }
+        } catch (_) {}
+        if (!region && typeof navigator !== 'undefined' && navigator.language) {
+            var parts = navigator.language.split('-');
+            region = parts[1] || '';
+        }
+        return this.popNandPushIfOK(argCount+1, this.makeStString(region));
+    },
+    js_primitiveCurrencySymbol: function(argCount) {
+        var symbol = '$';
+        try {
+            if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
+                var nf = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
+                var parts = nf.formatToParts ? nf.formatToParts(1) : null;
+                if (parts && parts.find) {
+                    var sym = parts.find(function(p){ return p.type === 'currency'; });
+                    if (sym && sym.value) symbol = sym.value;
+                }
+            }
+        } catch (_) {}
+        return this.popNandPushIfOK(argCount+1, this.makeStString(symbol));
+    },
+    js_primitiveCanWriteImage: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.vm.falseObj);
+    },
+    js_primitiveHasFileAccess: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.vm.falseObj);
+    },
+});
+Object.extend(Squeak.Primitives.prototype, 'browser_primitives', {
+    js_primitiveLanguage: function(argCount) {
+        var lang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US';
+        var two = (lang || 'en').split('-')[0] || 'en';
+        return this.popNandPushIfOK(argCount+1, this.makeStString(two));
+    },
+    js_primitiveCountry: function(argCount) {
+        var region = '';
+        try {
+            if (typeof Intl !== 'undefined' && typeof Intl.Locale !== 'undefined') {
+                var loc = new Intl.Locale((typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US');
+                region = (loc.maximize().region || '') || '';
+            }
+        } catch (_) {}
+        if (!region && typeof navigator !== 'undefined' && navigator.language) {
+            var parts = navigator.language.split('-');
+            region = parts[1] || '';
+        }
+        return this.popNandPushIfOK(argCount+1, this.makeStString(region));
+    },
+    js_primitiveCurrencySymbol: function(argCount) {
+        var symbol = '$';
+        try {
+            if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
+                var nf = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
+                var parts = nf.formatToParts ? nf.formatToParts(1) : null;
+                if (parts && parts.find) {
+                    var sym = parts.find(function(p){ return p.type === 'currency'; });
+                    if (sym && sym.value) symbol = sym.value;
+                }
+            }
+        } catch (_) {}
+        return this.popNandPushIfOK(argCount+1, this.makeStString(symbol));
+    },
+    js_primitiveCanWriteImage: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.vm.falseObj);
+    },
+    js_primitiveHasFileAccess: function(argCount) {
+        return this.popNandPushIfOK(argCount+1, this.vm.falseObj);
     },
 });

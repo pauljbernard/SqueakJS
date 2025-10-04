@@ -35,11 +35,18 @@ Object.extend(Squeak.Primitives.prototype,
             SecurityPlugin: {
                 primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0),
                 primitiveGetUntrustedUserDirectory: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveGetUntrustedUserDirectory", "/SqueakJS"),
+                primitiveCanWriteImage: this.js_primitiveCanWriteImage.bind(this),
             },
             LocalePlugin: {
                 primitiveTimezoneOffset: this.fakePrimitive.bind(this, "LocalePlugin.primitiveTimezoneOffset", 0),
+                primitiveLanguage: this.js_primitiveLanguage.bind(this),
+                primitiveCountry: this.js_primitiveCountry.bind(this),
+                primitiveCurrencySymbol: this.js_primitiveCurrencySymbol.bind(this),
             },
         });
+        if (this.builtinModules && this.builtinModules.FilePlugin) {
+            this.builtinModules.FilePlugin.primitiveHasFileAccess = this.js_primitiveHasFileAccess.bind(this);
+        }
         Object.extend(this.patchModules, {
             ScratchPlugin:          this.findPluginFunctions("scratch_"),
         });
