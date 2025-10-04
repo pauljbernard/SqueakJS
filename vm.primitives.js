@@ -103,19 +103,19 @@ Object.subclass('Squeak.Primitives',
             // LargeInteger Primitives (20-39)
             // 32-bit logic is aliased to Integer prims above
             case 20: this.vm.warnOnce("missing primitive: 20 (primitiveRemLargeIntegers)"); return false;
-            case 21: this.vm.warnOnce("missing primitive: 21 (primitiveAddLargeIntegers)"); return false;
-            case 22: this.vm.warnOnce("missing primitive: 22 (primitiveSubtractLargeIntegers)"); return false;
+            case 21: return false;
+            case 22: return false;
             case 23: return this.primitiveLessThanLargeIntegers(argCount);
             case 24: return this.primitiveGreaterThanLargeIntegers(argCount);
             case 25: return this.primitiveLessOrEqualLargeIntegers(argCount);
             case 26: return this.primitiveGreaterOrEqualLargeIntegers(argCount);
             case 27: return this.primitiveEqualLargeIntegers(argCount);
             case 28: return this.primitiveNotEqualLargeIntegers(argCount);
-            case 29: this.vm.warnOnce("missing primitive: 29 (primitiveMultiplyLargeIntegers)"); return false;
+            case 29: return false;
             case 30: this.vm.warnOnce("missing primitive: 30 (primitiveDivideLargeIntegers)"); return false;
-            case 31: this.vm.warnOnce("missing primitive: 31 (primitiveModLargeIntegers)"); return false;
-            case 32: this.vm.warnOnce("missing primitive: 32 (primitiveDivLargeIntegers)"); return false;
-            case 33: this.vm.warnOnce("missing primitive: 33 (primitiveQuoLargeIntegers)"); return false;
+            case 31: return false;
+            case 32: return false;
+            case 33: return false;
             case 34: this.vm.warnOnce("missing primitive: 34 (primitiveBitAndLargeIntegers)"); return false;
             case 35: this.vm.warnOnce("missing primitive: 35 (primitiveBitOrLargeIntegers)"); return false;
             case 36: this.vm.warnOnce("missing primitive: 36 (primitiveBitXorLargeIntegers)"); return false;
@@ -149,9 +149,9 @@ Object.subclass('Squeak.Primitives',
             case 62: return this.popNandPushIfOK(argCount+1, this.objectSize(false)); // size
             case 63: return this.popNandPushIfOK(argCount+1, this.objectAt(false,true,false)); // String.basicAt:
             case 64: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,true,false)); // String.basicAt:put:
-            case 65: this.vm.warnOnce("missing primitive: 65 (primitiveNext)"); return false;
-            case 66: this.vm.warnOnce("missing primitive: 66 (primitiveNextPut)"); return false;
-            case 67: this.vm.warnOnce("missing primitive: 67 (primitiveAtEnd)"); return false;
+            case 65: return false;
+            case 66: return false;
+            case 67: return false;
             // StorageManagement Primitives (68-79)
             case 68: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // Method.objectAt:
             case 69: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // Method.objectAt:put:
