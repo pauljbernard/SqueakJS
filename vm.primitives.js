@@ -52,7 +52,6 @@ Object.subclass('Squeak.Primitives',
     initPlugins: function() {
         // Empty placeholder (can be replaced by a plugins module at runtime, before starting the Squeak interpreter)
     },
-},
 'debuglog', {
     _vmdbgEnabledAll: function() {
         try {
