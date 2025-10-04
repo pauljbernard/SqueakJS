@@ -537,7 +537,7 @@ Object.subclass('Squeak.Primitives',
             case 575: { var v = this.stackInteger(0); var res = v === 0 ? 0 : (Math.floor(Math.log2(Math.abs(v))) + 1); return this.popNandPushIntIfOK(argCount+1, res); }
             // this is not really a primitive, see findSelectorInClass()
             case 576: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod);
-            case 578: this.vm.warnOnce("missing primitive: 578 (primitiveSuspendAndBackupPC)"); return false; // see bit 5 of vmParameterAt: 65
+            case 578: return this.primitiveSuspendAndBackupPC();
         }
         console.error("primitive " + index + " not implemented yet");
         return false;
@@ -1871,6 +1871,26 @@ Object.subclass('Squeak.Primitives',
         }
         return true;
     },
+    primitiveSuspendAndBackupPC: function() {
+        var process = this.vm.top();
+        if (!this.isA(process, Squeak.splOb_ClassProcess)) return false;
+        if (process === this.activeProcess()) {
+            if (this.vm.backupActiveProcessForSuspendAndBackup()) {
+                this.transferTo(this.wakeHighestPriority());
+            } else {
+                this.vm.popNandPush(1, this.vm.nilObj);
+                this.transferTo(this.wakeHighestPriority());
+            }
+        } else {
+            var oldList = process.pointers[Squeak.Proc_myList];
+            if (oldList.isNil) return false;
+            this.removeProcessFromList(process, oldList);
+            if (!this.success) return false;
+            process.pointers[Squeak.Proc_myList] = this.vm.nilObj;
+            this.vm.popNandPush(1, oldList);
+        }
+        return true;
+    },
     getScheduler: function() {
         var assn = this.vm.specialObjects[Squeak.splOb_SchedulerAssociation];
         return assn.pointers[Squeak.Assn_value];
@@ -2255,7 +2275,7 @@ Object.subclass('Squeak.Primitives',
             //      if non-zero bit 4 implies the VM can catch exceptions in FFI calls and answer them as primitive failures
             //      if non-zero bit 5 implies the VM's suspend primitive backs up the process to before the wait if it was waiting on a condition variable
             //      (read-only; Cog VMs only; nil in older Cog VMs, a boolean answering multiple bytecode support in not so old Cog VMs)
-            case 65: return 0;
+            case 65: return 32;
             // 66   the byte size of a stack page in the stack zone  (read-only; Cog VMs only)
             // 67   the maximum allowed size of old space in bytes, 0 implies no internal limit (Spur VMs only).
             case 67: return this.vm.image.totalMemory;

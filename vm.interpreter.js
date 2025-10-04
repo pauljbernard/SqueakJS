@@ -1146,6 +1146,43 @@ Object.subclass('Squeak.Interpreter',
             this.breakNow();
         }
     },
+    backupActiveProcessForSuspendAndBackup: function() {
+        // Prepare the active process for suspension such that it will resume
+        // before the send that initiated the wait. Return true if the
+        // adjustment succeeded, false if the primitive should fall back to
+        // the regular suspend behaviour.
+        this.storeContextRegisters();
+        var primitiveContext = this.activeContext;
+        var waitingContext = primitiveContext && primitiveContext.pointers[Squeak.Context_sender];
+        if (!this.isContext(waitingContext) || waitingContext.isNil) return false;
+        var callerContext = waitingContext.pointers[Squeak.Context_sender];
+        if (!this.isContext(callerContext) || callerContext.isNil) return false;
+        if (!this.isMethodContext(callerContext)) return false;
+        var callerMethod = callerContext.pointers[Squeak.Context_method];
+        if (!callerMethod || callerMethod.isNil) return false;
+        var callerPC = callerContext.pointers[Squeak.Context_instructionPointer];
+        if (callerPC.isNil) return false;
+        var pcAfterSend = this.decodeSqueakPC(callerPC, callerMethod);
+        var sendInfo = this.findSendBeforePC(callerMethod, pcAfterSend);
+        if (!sendInfo) return false;
+        var calleeMethod = waitingContext.contextMethod && waitingContext.contextMethod();
+        var argCount = calleeMethod && calleeMethod.methodNumArgs ? calleeMethod.methodNumArgs() : 0;
+        if (typeof sendInfo.argCount === "number" && sendInfo.argCount !== argCount) return false;
+        if (typeof sendInfo.argCount !== "number") sendInfo.argCount = argCount;
+        var spAfterSend = this.decodeSqueakSP(callerContext.pointers[Squeak.Context_stackPointer]);
+        var restoredSP = spAfterSend + sendInfo.argCount + 1;
+        var srcIndex = Squeak.Context_tempFrameStart - 1;
+        for (var i = 0; i <= sendInfo.argCount; i++)
+            callerContext.pointers[spAfterSend + 1 + i] = waitingContext.pointers[srcIndex + i];
+        callerContext.pointers[Squeak.Context_stackPointer] = this.encodeSqueakSP(restoredSP);
+        callerContext.pointers[Squeak.Context_instructionPointer] = this.encodeSqueakPC(sendInfo.pc, callerMethod);
+        callerContext.dirty = true;
+        this.unlinkContextForSuspend(waitingContext);
+        this.unlinkContextForSuspend(primitiveContext);
+        this.activeContext = callerContext;
+        this.fetchContextRegisters(callerContext);
+        return true;
+    },
     aboutToReturnThrough: function(resultObj, aContext) {
         this.push(this.exportThisContext());
         this.push(resultObj);
@@ -1366,6 +1403,15 @@ Object.subclass('Squeak.Interpreter',
         this.activeContext.pointers[Squeak.Context_instructionPointer] = this.encodeSqueakPC(this.pc, this.method);
         this.activeContext.pointers[Squeak.Context_stackPointer] = this.encodeSqueakSP(this.sp);
     },
+    unlinkContextForSuspend: function(context) {
+        if (!this.isContext(context) || context.isNil) return;
+        context.pointers[Squeak.Context_sender] = this.nilObj;
+        context.pointers[Squeak.Context_instructionPointer] = this.nilObj;
+        if (this.reclaimableContextCount > 0) {
+            this.reclaimableContextCount--;
+            this.recycleIfPossible(context);
+        }
+    },
     encodeSqueakPC: function(intPC, method) {
         // Squeak pc is offset by header and literals
         // and 1 for z-rel addressing
@@ -1380,6 +1426,58 @@ Object.subclass('Squeak.Interpreter',
     },
     decodeSqueakSP: function(squeakSP) {
         return squeakSP + (Squeak.Context_tempFrameStart - 1);
+    },
+    findSendBeforePC: function(method, pc) {
+        if (!method || pc <= 0) return null;
+        var stream = method.methodSignFlag()
+            ? new Squeak.InstructionStreamSista(method, this)
+            : new Squeak.InstructionStream(method, this);
+        var lastSend = null,
+            stub = function() {};
+        var client = {
+            currentPC: 0,
+            pushReceiverVariable: stub,
+            pushTemporaryVariable: stub,
+            pushConstant: stub,
+            pushLiteralVariable: stub,
+            storeIntoReceiverVariable: stub,
+            storeIntoTemporaryVariable: stub,
+            storeIntoLiteralVariable: stub,
+            popIntoReceiverVariable: stub,
+            popIntoTemporaryVariable: stub,
+            popIntoLiteralVariable: stub,
+            pushReceiver: stub,
+            methodReturnReceiver: stub,
+            methodReturnConstant: stub,
+            methodReturnTop: stub,
+            blockReturnTop: stub,
+            blockReturnConstant: stub,
+            doPop: stub,
+            doDup: stub,
+            pushActiveContext: stub,
+            pushNewArray: stub,
+            popIntoNewArray: stub,
+            callPrimitive: stub,
+            pushRemoteTemp: stub,
+            storeIntoRemoteTemp: stub,
+            popIntoRemoteTemp: stub,
+            pushClosureCopy: stub,
+            pushFullClosure: stub,
+            jump: stub,
+            jumpIf: stub,
+            send: function(selector, argCount, doSuper) {
+                lastSend = {pc: this.currentPC, selector: selector, argCount: argCount, super: !!doSuper};
+            },
+            sendSuperDirected: function(selector, argCount) {
+                lastSend = {pc: this.currentPC, selector: selector, argCount: typeof argCount === "number" ? argCount : null, super: true};
+            },
+            nop: stub,
+        };
+        while (stream.pc < pc) {
+            client.currentPC = stream.pc;
+            stream.interpretNextInstructionFor(client);
+        }
+        return lastSend;
     },
     recycleIfPossible: function(ctxt) {
         if (!this.isMethodContext(ctxt)) return;
