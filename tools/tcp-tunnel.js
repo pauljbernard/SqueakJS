@@ -228,6 +228,7 @@ function attachTcpTunnelNoServer(server, options = {}) {
   wss.on('connection', (ws, req) => {
     let sock = null;
     let connected = false;
+    let wsBytes = 0, tcpBytes = 0;
 
     ws.on('message', (msg) => {
       if (!connected) {
@@ -310,6 +311,7 @@ function attachTcpTunnelNoServer(server, options = {}) {
 
       if (Buffer.isBuffer(msg)) {
         if (sock && !sock.destroyed) {
+          wsBytes += msg.length || msg.byteLength || 0;
           try { sock.write(msg); } catch(_) {}
         }
       }
