@@ -233,7 +233,8 @@ server.listen(PORT, HOST, () => {
   const hostDisplay = HOST === '0.0.0.0' ? 'localhost' : HOST;
   console.log(`Serving SqueakJS files from ${ROOT}`);
   console.log(`HTTP available at http://${hostDisplay}:${PORT}/run/`);
-  console.log(`TCP tunnel WebSocket listening on ${TUNNEL_PATH}`);
+  console.log(`TCP tunnel WebSocket listening on ${Array.from(tunnelPaths).join(', ')}`);
+  console.log(`HTTP CONNECT proxy enabled on same origin`);
 });
 
 server.on('clientError', (err, socket) => {
