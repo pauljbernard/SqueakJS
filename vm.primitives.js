@@ -103,80 +103,56 @@ Object.subclass('Squeak.Primitives',
             // LargeInteger Primitives (20-39)
             // 32-bit logic is aliased to Integer prims above
             case 20: this.vm.warnOnce("missing primitive: 20 (primitiveRemLargeIntegers)"); return false;
-<<<<<<< Updated upstream
-            case 21: this.vm.warnOnce("missing primitive: 21 (primitiveAddLargeIntegers)"); return false;
-            case 22: this.vm.warnOnce("missing primitive: 22 (primitiveSubtractLargeIntegers)"); return false;
-||||||| constructed merge base
-            case 21: return false;
-            case 22: return false;
-=======
-            case 21: { // primitiveAddLargeIntegers
+            case 21: {
                 var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
                 if (!this.success) return false;
                 return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(a + b));
             }
-            case 22: { // primitiveSubtractLargeIntegers
+            case 22: {
                 var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
                 if (!this.success) return false;
                 return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(a - b));
             }
->>>>>>> Stashed changes
             case 23: return this.primitiveLessThanLargeIntegers(argCount);
             case 24: return this.primitiveGreaterThanLargeIntegers(argCount);
             case 25: return this.primitiveLessOrEqualLargeIntegers(argCount);
             case 26: return this.primitiveGreaterOrEqualLargeIntegers(argCount);
             case 27: return this.primitiveEqualLargeIntegers(argCount);
             case 28: return this.primitiveNotEqualLargeIntegers(argCount);
-<<<<<<< Updated upstream
-            case 29: this.vm.warnOnce("missing primitive: 29 (primitiveMultiplyLargeIntegers)"); return false;
-||||||| constructed merge base
-            case 29: return false;
-=======
-            case 29: { // primitiveMultiplyLargeIntegers
+            case 29: {
                 var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
                 if (!this.success) return false;
                 var prod = a * b;
                 if (!Number.isFinite(prod) || Math.abs(prod) > 9007199254740991) return false;
                 return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(prod));
             }
->>>>>>> Stashed changes
             case 30: this.vm.warnOnce("missing primitive: 30 (primitiveDivideLargeIntegers)"); return false;
-<<<<<<< Updated upstream
-            case 31: this.vm.warnOnce("missing primitive: 31 (primitiveModLargeIntegers)"); return false;
-            case 32: this.vm.warnOnce("missing primitive: 32 (primitiveDivLargeIntegers)"); return false;
-            case 33: this.vm.warnOnce("missing primitive: 33 (primitiveQuoLargeIntegers)"); return false;
-||||||| constructed merge base
-            case 31: return false;
-            case 32: return false;
-            case 33: return false;
-=======
-            case 31: { // primitiveModLargeIntegers  (a - (a div: b) * b)
+            case 31: {
                 var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
                 if (!this.success || b === 0) return false;
                 var d = Math.floor(a / b);
                 var r = a - d * b;
                 return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(r));
             }
-            case 32: { // primitiveDivLargeIntegers  floor division
+            case 32: {
                 var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
                 if (!this.success || b === 0) return false;
                 var d = Math.floor(a / b);
                 return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(d));
             }
-            case 33: { // primitiveQuoLargeIntegers  truncate toward zero
+            case 33: {
                 var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
                 if (!this.success || b === 0) return false;
                 var q = a / b;
                 q = q < 0 ? Math.ceil(q) : Math.floor(q);
                 return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(q));
             }
->>>>>>> Stashed changes
             case 34: this.vm.warnOnce("missing primitive: 34 (primitiveBitAndLargeIntegers)"); return false;
             case 35: this.vm.warnOnce("missing primitive: 35 (primitiveBitOrLargeIntegers)"); return false;
             case 36: this.vm.warnOnce("missing primitive: 36 (primitiveBitXorLargeIntegers)"); return false;
             case 37: this.vm.warnOnce("missing primitive: 37 (primitiveBitShiftLargeIntegers)"); return false;
-            case 38: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,false)); // Float basicAt
-            case 39: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,false)); // Float basicAtPut
+            case 38: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,false));
+            case 39: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,false));
             // Float Primitives (40-59)
             case 40: return this.popNandPushFloatIfOK(argCount+1,this.stackInteger(0)); // primitiveAsFloat
             case 41: return this.popNandPushFloatIfOK(argCount+1,this.stackFloat(1)+this.stackFloat(0));  // Float +
@@ -204,15 +180,6 @@ Object.subclass('Squeak.Primitives',
             case 62: return this.popNandPushIfOK(argCount+1, this.objectSize(false)); // size
             case 63: return this.popNandPushIfOK(argCount+1, this.objectAt(false,true,false)); // String.basicAt:
             case 64: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,true,false)); // String.basicAt:put:
-<<<<<<< Updated upstream
-            case 65: this.vm.warnOnce("missing primitive: 65 (primitiveNext)"); return false;
-            case 66: this.vm.warnOnce("missing primitive: 66 (primitiveNextPut)"); return false;
-            case 67: this.vm.warnOnce("missing primitive: 67 (primitiveAtEnd)"); return false;
-||||||| constructed merge base
-            case 65: return false;
-            case 66: return false;
-            case 67: return false;
-=======
             case 65: { // primitiveNext
                 if (argCount !== 0) return false;
                 var rcvr = this.stackReceiver();
@@ -295,7 +262,6 @@ Object.subclass('Squeak.Primitives',
                 var atEnd = (posOop | 0) >= (limOop | 0);
                 return this.popNandPushIfOK(argCount + 1, atEnd ? this.vm.trueObj : this.vm.falseObj);
             }
->>>>>>> Stashed changes
             // StorageManagement Primitives (68-79)
             case 68: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // Method.objectAt:
             case 69: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // Method.objectAt:put:
