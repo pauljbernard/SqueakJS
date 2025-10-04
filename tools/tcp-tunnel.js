@@ -323,9 +323,11 @@ function attachTcpTunnelNoServer(server, options = {}) {
           return;
         }
 
-        sock = net.connect({ host, port }, () => {
+        sock = net.connect({ host, port, allowHalfOpen: true }, () => {
           connected = true;
           clearHandshakeTimer();
+          try { sock.setNoDelay(true); } catch(_) {}
+          try { sock.setKeepAlive(true, 15000); } catch(_) {}
           logTunnel("tcp connected", { host, port });
           try { ws.send(JSON.stringify({ t: 'ok' })); } catch(e) {}
           if (preConnectQueue.length && sock && !sock.destroyed) {
@@ -345,16 +347,24 @@ function attachTcpTunnelNoServer(server, options = {}) {
           }
         });
 
-        sock.on('error', () => {
-          if (ws.readyState === WebSocket.OPEN) {
-            try { ws.send(JSON.stringify({ t: 'err', code: 500, msg: 'socket error' })); } catch(_) {}
-          }
-          try { ws.close(); } catch(_) {}
-        });
-
-        sock.on('close', () => {
+        sock.on('end', () => {
+          logTunnel("tcp end", { wsBytes, tcpBytes });
           if (ws.readyState === WebSocket.OPEN) {
             try { ws.send(JSON.stringify({ t: 'rc' })); } catch(_) {}
+          }
+        });
+
+        sock.on('close', (hadError) => {
+          logTunnel("tcp close", { hadError: !!hadError, wsBytes, tcpBytes });
+          if (ws.readyState === WebSocket.OPEN) {
+            try { ws.close(); } catch(_) {}
+          }
+        });
+
+        sock.on('error', (e) => {
+          errTunnel("tcp error", e && (e.stack || e.message || e));
+          if (ws.readyState === WebSocket.OPEN) {
+            try { ws.send(JSON.stringify({ t: 'err', code: 500, msg: e && e.message ? e.message : 'socket error' })); } catch(_) {}
           }
           try { ws.close(); } catch(_) {}
         });
@@ -371,9 +381,10 @@ function attachTcpTunnelNoServer(server, options = {}) {
       }
     });
 
-    ws.on('close', () => {
+    ws.on('close', (evt) => {
       clearHandshakeTimer();
-      logTunnel("ws close", { wsBytes, tcpBytes });
+      const details = evt ? { code: evt.code, reason: evt.reason, wasClean: evt.wasClean } : {};
+      logTunnel("ws close", Object.assign({ wsBytes, tcpBytes }, details));
       if (sock && !sock.destroyed) try { sock.destroy(); } catch(_) {}
     });
 
