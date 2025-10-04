@@ -52,6 +52,31 @@ Object.subclass('Squeak.Primitives',
     initPlugins: function() {
         // Empty placeholder (can be replaced by a plugins module at runtime, before starting the Squeak interpreter)
     }
+'debuglog', {
+    _vmdbgEnabledAll: function() {
+        try {
+            if (typeof window !== "undefined" && window.SqueakDebugVM) return true;
+            if (typeof process !== "undefined" && process && process.env && process.env.SQUEAK_DEBUG_VM) return true;
+        } catch (_) {}
+        return false;
+    },
+    _vmdbgEnabledStream: function() {
+        try {
+            if (typeof window !== "undefined" && (window.SqueakDebugVM || window.SqueakDebugStream)) return true;
+            if (typeof process !== "undefined" && process && process.env && (process.env.SQUEAK_DEBUG_VM || process.env.SQUEAK_DEBUG_STREAM)) return true;
+        } catch (_) {}
+        return false;
+    },
+    _vmdbgLog: function(obj, streamOnly) {
+        try {
+            var on = streamOnly ? this._vmdbgEnabledStream() : this._vmdbgEnabledAll();
+            if (!on) return;
+            if (typeof console !== "undefined" && console.debug) console.debug("[VMDBG] " + JSON.stringify(obj));
+            else if (typeof console !== "undefined" && console.log) console.log("[VMDBG] " + JSON.stringify(obj));
+        } catch (_) {}
+    }
+},
+
 },
 'dispatch', {
     quickSendOther: function(rcvr, lobits) {
@@ -210,6 +235,7 @@ Object.subclass('Squeak.Primitives',
                     this.vm.pop(); // remove array
                 }
                 rcvr.pointers[Squeak.Stream_position] = pos + 1;
+                if (this._vmdbgLog) this._vmdbgLog({site:"prim65",op:"read",spur:this.vm.image.isSpur,rcvrClass: rcvr && rcvr.sqClass ? rcvr.sqClass.className() : null, arrClass: arr && arr.sqClass ? arr.sqClass.className() : null, index: index, valueType: typeof value, pos: pos, lim: lim, ok: this.success}, true);
                 return this.popNandPushIfOK(argCount + 1, value);
             }
             case 66: { // primitiveNextPut:
@@ -224,6 +250,7 @@ Object.subclass('Squeak.Primitives',
                 var lim = limOop | 0;
                 if (pos >= lim) return false;
                 var index = pos + 1;
+                if (this._vmdbgLog) this._vmdbgLog({site:"prim66",op:"write",spur:this.vm.image.isSpur,rcvrClass: rcvr && rcvr.sqClass ? rcvr.sqClass.className() : null, arrClass: arr && arr.sqClass ? arr.sqClass.className() : null, index: index, valueType: typeof value, pos: pos, lim: lim, ok: this.success}, true);
                 if (arr.isPointers && arr.isPointers()) {
                     arr.pointers[index - 1] = value;
                     arr.dirty = true;
