@@ -197,6 +197,8 @@ Object.subclass('Squeak.Interpreter',
             } catch (error) {
                 console.error("Failed to hack " + each.method + " with error " + error);
             }
+        }, this);
+    }
 },
 'debuglog', {
     _vmdbgEnabledAll: function() {
@@ -213,10 +215,6 @@ Object.subclass('Squeak.Interpreter',
             else if (typeof console !== "undefined" && console.log) console.log("[VMDBG] " + JSON.stringify(obj));
         } catch (_) {}
     }
-
-
-        }, this);
-    },
 },
 'interpreting', {
     interpretOne: function(singleStep) {
