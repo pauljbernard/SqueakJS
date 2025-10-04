@@ -230,10 +230,44 @@ function attachTcpTunnelNoServer(server, options = {}) {
     let connected = false;
     let wsBytes = 0, tcpBytes = 0;
 
+    let preConnectQueue = [];
+    let preConnectBytes = 0;
+    const MAX_QUEUE_BYTES = 128 * 1024;
+    const MAX_QUEUE_FRAMES = 64;
+    const HANDSHAKE_TIMEOUT_MS = 5000;
+    let handshakeTimer = null;
+    function ensureHandshakeTimer() {
+      if (handshakeTimer) return;
+      handshakeTimer = setTimeout(() => {
+        errTunnel("handshake timeout");
+        try { ws.close(); } catch(_) {}
+      }, HANDSHAKE_TIMEOUT_MS);
+    }
+    function clearHandshakeTimer() {
+      if (handshakeTimer) {
+        clearTimeout(handshakeTimer);
+        handshakeTimer = null;
+      }
+    }
+    function toBuffer(m) {
+      if (Buffer.isBuffer(m)) return m;
+      if (typeof m === 'string') return null;
+      if (m instanceof ArrayBuffer) return Buffer.from(new Uint8Array(m));
+      if (ArrayBuffer.isView(m)) return Buffer.from(m.buffer, m.byteOffset, m.byteLength);
+      try {
+        if (m && m.data && (m.data instanceof ArrayBuffer)) return Buffer.from(new Uint8Array(m.data));
+      } catch(_) {}
+      return null;
+    }
+
     ws.on('message', (msg) => {
       if (!connected) {
-        let asString;
-        try { asString = msg.toString(); } catch(_) { asString = null; }
+        let asString = null;
+        if (typeof msg === 'string') asString = msg;
+        else {
+          try { asString = msg.toString(); } catch(_) { asString = null; }
+        }
+
         if (asString) {
           try {
             const obj = JSON.parse(asString);
@@ -255,6 +289,17 @@ function attachTcpTunnelNoServer(server, options = {}) {
               return;
             }
           } catch(_) {}
+        } else {
+          const buf = toBuffer(msg);
+          if (buf) {
+            ensureHandshakeTimer();
+            if (preConnectQueue.length < MAX_QUEUE_FRAMES && (preConnectBytes + buf.length) <= MAX_QUEUE_BYTES) {
+              preConnectQueue.push(buf);
+              preConnectBytes += buf.length;
+            } else {
+            }
+            return;
+          }
         }
 
         let m;
@@ -280,11 +325,19 @@ function attachTcpTunnelNoServer(server, options = {}) {
 
         sock = net.connect({ host, port }, () => {
           connected = true;
+          clearHandshakeTimer();
           logTunnel("tcp connected", { host, port });
           try { ws.send(JSON.stringify({ t: 'ok' })); } catch(e) {}
+          if (preConnectQueue.length && sock && !sock.destroyed) {
+            for (const b of preConnectQueue) {
+              wsBytes += b.length;
+              try { sock.write(b); } catch(_) {}
+            }
+            preConnectQueue = [];
+            preConnectBytes = 0;
+          }
         });
 
-        let wsBytes = 0, tcpBytes = 0;
         sock.on('data', (data) => {
           tcpBytes += data.length || 0;
           if (ws.readyState === WebSocket.OPEN) {
@@ -309,20 +362,23 @@ function attachTcpTunnelNoServer(server, options = {}) {
         return;
       }
 
-      if (Buffer.isBuffer(msg)) {
+      const buf = toBuffer(msg);
+      if (buf) {
         if (sock && !sock.destroyed) {
-          wsBytes += msg.length || msg.byteLength || 0;
-          try { sock.write(msg); } catch(_) {}
+          wsBytes += buf.length;
+          try { sock.write(buf); } catch(_) {}
         }
       }
     });
 
     ws.on('close', () => {
+      clearHandshakeTimer();
       logTunnel("ws close", { wsBytes, tcpBytes });
       if (sock && !sock.destroyed) try { sock.destroy(); } catch(_) {}
     });
 
     ws.on('error', (e) => {
+      clearHandshakeTimer();
       errTunnel("ws error", e && (e.stack || e.message || e));
       if (sock && !sock.destroyed) try { sock.destroy(); } catch(_) {}
     });
