@@ -919,11 +919,16 @@ Object.subclass('Squeak.Interpreter',
     send: function(selector, argCount, doSuper) {
         var newRcvr = this.stackValue(argCount);
         var lookupClass;
-        if (doSuper) {
+        if (!doSuper) {
+            var coerced = this.coerceSmallIntegerReceiver(newRcvr, selector, argCount);
+            if (coerced) {
+                newRcvr = coerced;
+                this.activeContext.pointers[this.sp - argCount] = newRcvr;
+            }
+            lookupClass = this.getClass(newRcvr);
+        } else {
             lookupClass = this.method.methodClassForSuper();
             lookupClass = lookupClass.superclass();
-        } else {
-            lookupClass = this.getClass(newRcvr);
         }
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
         if (entry.primIndex) {
@@ -936,6 +941,11 @@ Object.subclass('Squeak.Interpreter',
     sendSuperDirected: function(selector, argCount) {
         var lookupClass = this.pop().superclass();
         var newRcvr = this.stackValue(argCount);
+        var coerced = this.coerceSmallIntegerReceiver(newRcvr, selector, argCount);
+        if (coerced) {
+            newRcvr = coerced;
+            this.activeContext.pointers[this.sp - argCount] = newRcvr;
+        }
         var entry = this.findSelectorInClass(selector, argCount, lookupClass);
         if (entry.primIndex) {
             //note details for verification of at/atput primitives
@@ -943,6 +953,25 @@ Object.subclass('Squeak.Interpreter',
             this.verifyAtClass = lookupClass;
         }
         this.executeNewMethod(newRcvr, entry.method, entry.argCount, entry.primIndex, entry.mClass, selector);
+    },
+    coerceSmallIntegerReceiver: function(receiver, selector, argCount) {
+        if (typeof receiver !== "number" || argCount !== 0) return null;
+        if (!selector || !selector.bytes) return null;
+        var selectorName = selector.bytesAsString();
+        if (!this.shouldCoerceSmallIntegerSelector(selectorName)) return null;
+        return this.characterFromCodePoint(receiver);
+    },
+    shouldCoerceSmallIntegerSelector: function(selectorName) {
+        return selectorName === "isSeparator";
+    },
+    characterFromCodePoint: function(codePoint) {
+        if (codePoint == null) return null;
+        if (this.image.isSpur) {
+            if (codePoint < 0 || codePoint > 0x10FFFF) return null;
+            return this.primHandler.charFromIntSpur(codePoint);
+        }
+        if (codePoint < 0 || codePoint > 255) return null;
+        return this.primHandler.charFromInt(codePoint);
     },
     sendAsPrimitiveFailure: function(rcvr, method, argCount) {
         this.executeNewMethod(rcvr, method, argCount, 0);
