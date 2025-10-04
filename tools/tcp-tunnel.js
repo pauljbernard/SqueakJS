@@ -157,9 +157,158 @@ function attachTcpTunnel(server, options = {}) {
 });
 
   return wss;
+function attachTcpTunnelNoServer(server, options = {}) {
+  const {
+    paths = ['/tcp-tunnel'],
+    allowHosts = [],
+    allowPorts = [],
+  } = options;
+
+  const hosts = toList(allowHosts);
+  const ports = toPortList(allowPorts);
+
+  function hostAllowed(targetHost) {
+    if (!hosts.length) return true;
+    if (hosts.includes('*')) return true;
+    return hosts.includes(targetHost);
+  }
+
+  function portAllowed(p) {
+    return !ports.length || ports.includes(p);
+  }
+
+  const wss = new WebSocket.Server({ noServer: true });
+
+  function normalizeIncomingPath(p) {
+    if (!p) return '';
+    try {
+      const u = new URL(p, 'http://localhost');
+      let name = u.pathname || '';
+      if (name.length > 1 && name.endsWith('/')) name = name.slice(0, -1);
+      return name;
+    } catch (_) {
+      const [nameOnly] = String(p).split('?');
+      if (!nameOnly) return '';
+      return nameOnly.length > 1 && nameOnly.endsWith('/') ? nameOnly.slice(0, -1) : nameOnly;
+    }
+  }
+
+  const acceptable = new Set(
+    toList(paths).map((p) => {
+      const base = p.startsWith('/') ? p : `/${p}`;
+      return base.length > 1 && base.endsWith('/') ? base.slice(0, -1) : base;
+    })
+  );
+
+  server.on('upgrade', (req, socket, head) => {
+    const pathName = normalizeIncomingPath(req.url || '');
+    if (!acceptable.has(pathName)) return;
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  });
+
+  wss.on('connection', (ws, req) => {
+    let sock = null;
+    let connected = false;
+
+    ws.on('message', (msg) => {
+      if (!connected) {
+        let asString;
+        try { asString = msg.toString(); } catch(_) { asString = null; }
+        if (asString) {
+          try {
+            const obj = JSON.parse(asString);
+            if (obj && obj.t === 'dns' && typeof obj.h === 'string') {
+              const qname = String(obj.h);
+              const dns = require('dns');
+              dns.resolve4(qname, (err, addresses) => {
+                if (err || !Array.isArray(addresses) || addresses.length === 0) {
+                  try { ws.send(JSON.stringify({ t: 'dns', err: String((err && err.code) || 'ENOTFOUND') })); } catch(_) {}
+                  return;
+                }
+                const dohLike = {
+                  Status: 0,
+                  Question: [{ name: qname }],
+                  Answer: addresses.map(a => ({ name: qname, type: 1, TTL: 86400, data: a }))
+                };
+                try { ws.send(JSON.stringify({ t: 'dns', r: dohLike })); } catch(_) {}
+              });
+              return;
+            }
+          } catch(_) {}
+        }
+
+        let m;
+        try {
+          m = JSON.parse(asString || '');
+        } catch(e) {
+          ws.close();
+          return;
+        }
+        if (!m || m.t !== 'c') { ws.close(); return; }
+        const host = String(m.h || '');
+        const port = parseInt(m.p, 10);
+        if (!host || !Number.isInteger(port) || port <= 0 || port > 65535) {
+          try { ws.send(JSON.stringify({ t: 'err', code: 400, msg: 'bad host/port' })); } catch(e) {}
+          ws.close();
+          return;
+        }
+        if (!hostAllowed(host) || !portAllowed(port)) {
+          try { ws.send(JSON.stringify({ t: 'err', code: 403, msg: 'forbidden' })); } catch(e) {}
+          ws.close();
+          return;
+        }
+
+        sock = net.connect({ host, port }, () => {
+          connected = true;
+          try { ws.send(JSON.stringify({ t: 'ok' })); } catch(e) {}
+        });
+
+        sock.on('data', (data) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try { ws.send(data); } catch(e) {}
+          }
+        });
+
+        sock.on('error', () => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try { ws.send(JSON.stringify({ t: 'err', code: 500, msg: 'socket error' })); } catch(_) {}
+          }
+          try { ws.close(); } catch(_) {}
+        });
+
+        sock.on('close', () => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try { ws.send(JSON.stringify({ t: 'rc' })); } catch(_) {}
+          }
+          try { ws.close(); } catch(_) {}
+        });
+
+        return;
+      }
+
+      if (Buffer.isBuffer(msg)) {
+        if (sock && !sock.destroyed) {
+          try { sock.write(msg); } catch(_) {}
+        }
+      }
+    });
+
+    ws.on('close', () => {
+      if (sock && !sock.destroyed) try { sock.destroy(); } catch(_) {}
+    });
+
+    ws.on('error', () => {
+      if (sock && !sock.destroyed) try { sock.destroy(); } catch(_) {}
+    });
+  });
+
+  return wss;
+}
 }
 
-module.exports = { attachTcpTunnel };
+module.exports = { attachTcpTunnel, attachTcpTunnelNoServer };
 
 if (require.main === module) {
   const PORT = process.env.TUNNEL_PORT || 8081;

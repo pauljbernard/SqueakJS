@@ -102,7 +102,7 @@ SqueakJS can tunnel TCP-like sockets over a same-origin WebSocket so images can 
 
 Client options (enabled by default):
 - enableTcpTunnel: set to false to disable tunneling
-- tcpTunnelPath: WebSocket endpoint path (default "/tcp-tunnel"); clients hosted under a subpath like "/run/" will also work out of the box due to the server mounting the tunnel at both /tcp-tunnel and /run/tcp-tunnel
+- tcpTunnelPath: WebSocket endpoint path (default "/tcp-tunnel"); clients hosted under a subpath like "/run/" will also work out of the box due to the server mounting the tunnel at both /tcp-tunnel and /run/tcp-tunnel, with or without a trailing slash
 - proxy: optional HTTP proxy URL; when set to same-origin, HTTPS requests may use the HTTP CONNECT proxy exposed by the demo server
 
 HTTP-over-tunnel fallback:
@@ -138,7 +138,7 @@ Path resolution and fallback:
   - an absolute path like "/tcp-tunnel"
   - a relative path like "tcp-tunnel", resolved against the app’s base path (document.baseURI or the directory of location.pathname)
 - Default is a relative "tcp-tunnel", so when the app is served under a subpath (e.g., "/squeak/"), the tunnel resolves to "/squeak/tcp-tunnel".
-- If the initial tunnel URL fails to upgrade (e.g., 404), the client will retry once against the default absolute "/tcp-tunnel". The demo server accepts both on the same origin (/run/tcp-tunnel and /tcp-tunnel) to make this fallback seamless.
+- If the initial tunnel URL fails to upgrade (e.g., 404), the client will retry once against the default absolute "/tcp-tunnel". The demo server accepts both on the same origin (/run/tcp-tunnel and /tcp-tunnel), with or without trailing slash, to make this fallback seamless.
 HTTP CONNECT proxy:
 - The demo server also implements an HTTP CONNECT proxy on the same origin. Point SqueakJS.options.proxy to the same-origin URL (e.g., `http://localhost:3000`) to allow HTTPS requests to tunnel via CONNECT when needed.
 - Defaults allow proxying to any host and port; restrict using TUNNEL_ALLOW_HOSTS and TUNNEL_ALLOW_PORTS in production.
