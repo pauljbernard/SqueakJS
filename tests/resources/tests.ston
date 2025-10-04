@@ -8,10 +8,11 @@ SmalltalkCISpec {
         #LinkedListTest, #OrderedCollectionTest,
         #OrderedDictionaryTest, #SequenceableCollectionTest,
         #SortedCollectionTest,
-        #StackTest,
-        #CharacterTest, #SymbolTest,
-        #BagTest, #SetTest,
-        #SqueakJSLargeIntegerPrimitiveTest
+      #StackTest,
+      #CharacterTest, #SymbolTest,
+      #BagTest, #SetTest,
+        #SqueakJSLargeIntegerPrimitiveTest,
+        #SqueakJSSuspendAndBackupPCTest
       ]
     }
   }
