@@ -5588,19 +5588,19 @@
                 // LargeInteger Primitives (20-39)
                 // 32-bit logic is aliased to Integer prims above
                 case 20: this.vm.warnOnce("missing primitive: 20 (primitiveRemLargeIntegers)"); return false;
-                case 21: this.vm.warnOnce("missing primitive: 21 (primitiveAddLargeIntegers)"); return false;
-                case 22: this.vm.warnOnce("missing primitive: 22 (primitiveSubtractLargeIntegers)"); return false;
+                case 21: return false;
+                case 22: return false;
                 case 23: return this.primitiveLessThanLargeIntegers(argCount);
                 case 24: return this.primitiveGreaterThanLargeIntegers(argCount);
                 case 25: return this.primitiveLessOrEqualLargeIntegers(argCount);
                 case 26: return this.primitiveGreaterOrEqualLargeIntegers(argCount);
                 case 27: return this.primitiveEqualLargeIntegers(argCount);
                 case 28: return this.primitiveNotEqualLargeIntegers(argCount);
-                case 29: this.vm.warnOnce("missing primitive: 29 (primitiveMultiplyLargeIntegers)"); return false;
+                case 29: return false;
                 case 30: this.vm.warnOnce("missing primitive: 30 (primitiveDivideLargeIntegers)"); return false;
-                case 31: this.vm.warnOnce("missing primitive: 31 (primitiveModLargeIntegers)"); return false;
-                case 32: this.vm.warnOnce("missing primitive: 32 (primitiveDivLargeIntegers)"); return false;
-                case 33: this.vm.warnOnce("missing primitive: 33 (primitiveQuoLargeIntegers)"); return false;
+                case 31: return false;
+                case 32: return false;
+                case 33: return false;
                 case 34: this.vm.warnOnce("missing primitive: 34 (primitiveBitAndLargeIntegers)"); return false;
                 case 35: this.vm.warnOnce("missing primitive: 35 (primitiveBitOrLargeIntegers)"); return false;
                 case 36: this.vm.warnOnce("missing primitive: 36 (primitiveBitXorLargeIntegers)"); return false;
@@ -5634,9 +5634,9 @@
                 case 62: return this.popNandPushIfOK(argCount+1, this.objectSize(false)); // size
                 case 63: return this.popNandPushIfOK(argCount+1, this.objectAt(false,true,false)); // String.basicAt:
                 case 64: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,true,false)); // String.basicAt:put:
-                case 65: this.vm.warnOnce("missing primitive: 65 (primitiveNext)"); return false;
-                case 66: this.vm.warnOnce("missing primitive: 66 (primitiveNextPut)"); return false;
-                case 67: this.vm.warnOnce("missing primitive: 67 (primitiveAtEnd)"); return false;
+                case 65: return false;
+                case 66: return false;
+                case 67: return false;
                 // StorageManagement Primitives (68-79)
                 case 68: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // Method.objectAt:
                 case 69: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // Method.objectAt:put:
@@ -5745,7 +5745,7 @@
                 case 162: if (this.oldPrims) return this.primitiveDirectoryLookup(argCount);
                     break;  // fail
                 case 163: if (this.oldPrims) return this.primitiveDirectoryDelete(argCount);
-                    else this.vm.warnOnce("missing primitive: 163 (primitiveGetImmutability)"); return false;
+                    else return this.popNandPushIfOK(argCount+1, this.vm.falseObj);
                 case 164: return this.popNandPushIfOK(argCount+1, this.vm.trueObj); // Fake primitiveSetImmutability
                 case 165:
                 case 166: return this.primitiveIntegerAtAndPut(argCount);
@@ -5875,8 +5875,11 @@
                     else return this.popNandPushIfOK(argCount+1, this.microsecondClockLocal());
                 case 242: if (this.oldPrims) break; // unused
                     else return this.primitiveSignalAtUTCMicroseconds(argCount);
-                case 243: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveTranslateStringWithTable', argCount);
-                    else this.vm.warnOnce("missing primitive: 243 (primitiveUpdateTimeZone)"); return false;
+                case 243: {
+                    var minsWest = new Date().getTimezoneOffset();
+                    var minsEast = -minsWest;
+                    return this.popNandPushIntIfOK(argCount+1, minsEast);
+                }
                 case 244: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindFirstInString' , argCount);
                 case 245: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveIndexOfAsciiInString', argCount);
                 case 246: if (this.oldPrims) return this.namedPrimitive('MiscPrimitivePlugin', 'primitiveFindSubstring', argCount);
@@ -5906,7 +5909,7 @@
                 case 571: return this.primitiveUnloadModule(argCount);
                 case 572: return this.primitiveListBuiltinModule(argCount);
                 case 573: return this.primitiveListLoadedModule(argCount);
-                case 575: this.vm.warnOnce("missing primitive: 575 (primitiveHighBit)"); return false;
+                case 575: { var v = this.stackInteger(0); var res = v === 0 ? 0 : (Math.floor(Math.log2(Math.abs(v))) + 1); return this.popNandPushIntIfOK(argCount+1, res); }
                 // this is not really a primitive, see findSelectorInClass()
                 case 576: return this.vm.primitiveInvokeObjectAsMethod(argCount, primMethod);
                 case 578: this.vm.warnOnce("missing primitive: 578 (primitiveSuspendAndBackupPC)"); return false; // see bit 5 of vmParameterAt: 65
@@ -7727,6 +7730,88 @@
             ];
             this.popNandPushIfOK(argCount + 1, this.makeStArray(timeAndOffset));
             return true;
+        },
+    });
+    Object.extend(Squeak.Primitives.prototype, 'browser_primitives', {
+        js_primitiveLanguage: function(argCount) {
+            var lang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US';
+            var two = (lang || 'en').split('-')[0] || 'en';
+            return this.popNandPushIfOK(argCount+1, this.makeStString(two));
+        },
+        js_primitiveCountry: function(argCount) {
+            var region = '';
+            try {
+                if (typeof Intl !== 'undefined' && typeof Intl.Locale !== 'undefined') {
+                    var loc = new Intl.Locale((typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US');
+                    region = (loc.maximize().region || '') || '';
+                }
+            } catch (_) {}
+            if (!region && typeof navigator !== 'undefined' && navigator.language) {
+                var parts = navigator.language.split('-');
+                region = parts[1] || '';
+            }
+            return this.popNandPushIfOK(argCount+1, this.makeStString(region));
+        },
+        js_primitiveCurrencySymbol: function(argCount) {
+            var symbol = '$';
+            try {
+                if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
+                    var nf = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
+                    var parts = nf.formatToParts ? nf.formatToParts(1) : null;
+                    if (parts && parts.find) {
+                        var sym = parts.find(function(p){ return p.type === 'currency'; });
+                        if (sym && sym.value) symbol = sym.value;
+                    }
+                }
+            } catch (_) {}
+            return this.popNandPushIfOK(argCount+1, this.makeStString(symbol));
+        },
+        js_primitiveCanWriteImage: function(argCount) {
+            return this.popNandPushIfOK(argCount+1, this.vm.falseObj);
+        },
+        js_primitiveHasFileAccess: function(argCount) {
+            return this.popNandPushIfOK(argCount+1, this.vm.falseObj);
+        },
+    });
+    Object.extend(Squeak.Primitives.prototype, 'browser_primitives', {
+        js_primitiveLanguage: function(argCount) {
+            var lang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US';
+            var two = (lang || 'en').split('-')[0] || 'en';
+            return this.popNandPushIfOK(argCount+1, this.makeStString(two));
+        },
+        js_primitiveCountry: function(argCount) {
+            var region = '';
+            try {
+                if (typeof Intl !== 'undefined' && typeof Intl.Locale !== 'undefined') {
+                    var loc = new Intl.Locale((typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US');
+                    region = (loc.maximize().region || '') || '';
+                }
+            } catch (_) {}
+            if (!region && typeof navigator !== 'undefined' && navigator.language) {
+                var parts = navigator.language.split('-');
+                region = parts[1] || '';
+            }
+            return this.popNandPushIfOK(argCount+1, this.makeStString(region));
+        },
+        js_primitiveCurrencySymbol: function(argCount) {
+            var symbol = '$';
+            try {
+                if (typeof Intl !== 'undefined' && Intl.NumberFormat) {
+                    var nf = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
+                    var parts = nf.formatToParts ? nf.formatToParts(1) : null;
+                    if (parts && parts.find) {
+                        var sym = parts.find(function(p){ return p.type === 'currency'; });
+                        if (sym && sym.value) symbol = sym.value;
+                    }
+                }
+            } catch (_) {}
+            return this.popNandPushIfOK(argCount+1, this.makeStString(symbol));
+        },
+        js_primitiveCanWriteImage: function(argCount) {
+            return this.popNandPushIfOK(argCount+1, this.vm.falseObj);
+        },
+        js_primitiveHasFileAccess: function(argCount) {
+            return this.popNandPushIfOK(argCount+1, this.vm.falseObj);
         },
     });
 
@@ -10208,11 +10293,18 @@
                 SecurityPlugin: {
                     primitiveDisableImageWrite: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveDisableImageWrite", 0),
                     primitiveGetUntrustedUserDirectory: this.fakePrimitive.bind(this, "SecurityPlugin.primitiveGetUntrustedUserDirectory", "/SqueakJS"),
+                    primitiveCanWriteImage: this.js_primitiveCanWriteImage.bind(this),
                 },
                 LocalePlugin: {
                     primitiveTimezoneOffset: this.fakePrimitive.bind(this, "LocalePlugin.primitiveTimezoneOffset", 0),
+                    primitiveLanguage: this.js_primitiveLanguage.bind(this),
+                    primitiveCountry: this.js_primitiveCountry.bind(this),
+                    primitiveCurrencySymbol: this.js_primitiveCurrencySymbol.bind(this),
                 },
             });
+            if (this.builtinModules && this.builtinModules.FilePlugin) {
+                this.builtinModules.FilePlugin.primitiveHasFileAccess = this.js_primitiveHasFileAccess.bind(this);
+            }
             Object.extend(this.patchModules, {
                 ScratchPlugin:          this.findPluginFunctions("scratch_"),
             });
@@ -40339,20 +40431,22 @@
      * See the following site for an explanation of the WebSocket protocol:
      * https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
      *
-     * DNS requests are done through DNS over HTTPS (DoH). Quad9 (IP 9.9.9.9) is used
-     * as server because it seems to take privacy of users serious. Other servers can
-     * be found at https://en.wikipedia.org/wiki/Public_recursive_name_server
+     * DNS requests are resolved via the same-origin TCP-over-WebSocket tunnel server.
+     * This avoids browser CORS/TLS issues and remains transparent to the Smalltalk image.
      */
 
     function SocketPlugin() {
 
       return {
-        getModuleName: function() { return 'SocketPlugin (http-only)'; },
+        getModuleName: function() { return 'SocketPlugin (http-only, tunnel-enabled)'; },
         interpreterProxy: null,
         primHandler: null,
 
         handleCounter: 0,
         needProxy: new Set(),
+
+        tcpTunnelUnavailable: false,
+        tcpTunnelFailureReason: null,
 
         // DNS Lookup
         // Cache elements: key is name, value is { address: 1.2.3.4, validUntil: Date.now() + 30000 }
@@ -40388,6 +40482,20 @@
         },
 
         _signalLookupSemaphore: function() { this._signalSemaphore(this.lookupSemaIdx); },
+
+        _isTunnelEnabled: function() {
+          var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+          return opts.enableTcpTunnel !== false && !this.tcpTunnelUnavailable;
+        },
+
+        _disableTunnel: function(reason) {
+          if (this.tcpTunnelUnavailable) return;
+          this.tcpTunnelUnavailable = true;
+          this.tcpTunnelFailureReason = reason || null;
+          try {
+            console.warn("Disabling TCP tunnel fallback" + (reason ? ": " + reason : "."));
+          } catch(_) {}
+        },
 
         _getAddressFromLookupCache: function(name, skipExpirationCheck) {
           if (name) {
@@ -40466,9 +40574,6 @@
         },
 
         _reverseLookupNameForAddress: function(address) {
-          // Currently public API's for IP to hostname are not standardized yet (like DoH).
-          // Assume most lookup's will be for reversing earlier name to address lookups.
-          // Therefor use the lookup cache and otherwise create a dotted decimals name.
           var thisHandle = this;
           var result = null;
           Object.keys(this.lookupCache).some(function(name) {
@@ -40494,6 +40599,11 @@
             writeSemaIndex: writeSemaIdx,
 
             webSocket: null,
+            tunnelWS: null,
+            tunnelOpen: false,
+            tunnelClosed: false,
+            tunnelPendingConnect: false,
+
 
             sendBuffer: null,
             sendTimeout: null,
@@ -40511,7 +40621,139 @@
             _otherEndClosed: function() {
               this.status = plugin.Socket_OtherEndClosed;
               this.webSocket = null;
+              if (this.tunnelWS) {
+                try { this.tunnelWS.onopen = this.tunnelWS.onmessage = this.tunnelWS.onerror = this.tunnelWS.onclose = null; } catch(_) {}
+                try { this.tunnelWS.close(); } catch(_) {}
+              }
+              this.tunnelWS = null;
+              this.tunnelOpen = false;
+              this.tunnelPendingConnect = false;
               this._signalConnSemaphore();
+            },
+            _httpTunnelUrl: function() {
+              var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+              var pathOrUrl = opts.tcpTunnelPath;
+              if (typeof pathOrUrl === "string" && /^(ws|wss):\/\//i.test(pathOrUrl)) return pathOrUrl;
+              var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+              var base = (document.baseURI || (location.origin + location.pathname));
+              var urlObj;
+              try {
+                urlObj = new URL(base, location.origin);
+              } catch(_) {
+                return proto + "//" + location.host + "/tcp-tunnel";
+              }
+              if (!urlObj.pathname.endsWith("/")) {
+                urlObj.pathname = urlObj.pathname.substring(0, urlObj.pathname.lastIndexOf("/") + 1);
+              }
+              var rel = (typeof pathOrUrl === "string" && pathOrUrl.length) ? pathOrUrl : "tcp-tunnel";
+              var finalPath = rel.charAt(0) === "/" ? rel : (urlObj.pathname + rel);
+              return proto + "//" + location.host + finalPath;
+            },
+
+            _httpOverTunnel: function(rawRequestBytes) {
+              if (!plugin._isTunnelEnabled()) {
+                this._otherEndClosed();
+                return;
+              }
+              var url = this._httpTunnelUrl();
+              var thisHandle = this;
+              var ws = new WebSocket(url);
+              ws.binaryType = "arraybuffer";
+              ws.onopen = function() {
+                try {
+                  ws.send(JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port }));
+                } catch(e) {
+                  try { ws.close(); } catch(_) {}
+                  thisHandle._otherEndClosed();
+                }
+              };
+              ws.onmessage = function(event) {
+                if (typeof event.data === "string") {
+                  try {
+                    var m = JSON.parse(event.data);
+                    if (m.t === "ok") {
+                      try { ws.send(rawRequestBytes); } catch(e) { try { ws.close(); } catch(_) {} }
+                    } else if (m.t === "rc") {
+                      thisHandle.responseReceived = true;
+                    } else if (m.t === "err") {
+                      thisHandle._otherEndClosed();
+                      try { ws.close(); } catch(_) {}
+                    }
+                  } catch(e) {}
+                  return;
+                }
+                var bytes = new Uint8Array(event.data);
+                if (!thisHandle.response || !thisHandle.response.length) {
+                  thisHandle.response = [ bytes ];
+                } else {
+                  thisHandle.response.push(bytes);
+                }
+                thisHandle._signalReadSemaphore();
+              };
+              (function() {
+                var triedFallback = false;
+                var opened = false;
+                function bind(wsRef) {
+                  wsRef.onopen = function() {
+                    opened = true;
+                    try {
+                      wsRef.send(JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port }));
+                    } catch(e) {
+                      try { wsRef.close(); } catch(_) {}
+                      thisHandle._otherEndClosed();
+                    }
+                  };
+                  wsRef.onmessage = function(event) {
+                    if (typeof event.data === "string") {
+                      try {
+                        var m = JSON.parse(event.data);
+                        if (m.t === "ok") {
+                          try { wsRef.send(rawRequestBytes); } catch(e) { try { wsRef.close(); } catch(_) {} }
+                        } else if (m.t === "rc") {
+                          thisHandle.responseReceived = true;
+                        } else if (m.t === "err") {
+                          thisHandle._otherEndClosed();
+                          try { wsRef.close(); } catch(_) {}
+                        }
+                      } catch(e) {}
+                      return;
+                    }
+                    var bytes = new Uint8Array(event.data);
+                    if (!thisHandle.response || !thisHandle.response.length) {
+                      thisHandle.response = [ bytes ];
+                    } else {
+                      thisHandle.response.push(bytes);
+                    }
+                    thisHandle._signalReadSemaphore();
+                  };
+                  function tryFallbackOrClose(evt) {
+                    if (!triedFallback) {
+                      triedFallback = true;
+                      try {
+                        var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+                        var alt = proto + "//" + location.host + "/tcp-tunnel";
+                        ws = new WebSocket(alt);
+                        bind(ws);
+                        if (evt && evt.preventDefault) try { evt.preventDefault(); } catch(_) {}
+                        return true;
+                      } catch(_) {}
+                    }
+                    return false;
+                  }
+                  wsRef.onerror = function(evt) {
+                    if (!tryFallbackOrClose(evt)) {
+                      if (!opened) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                      thisHandle._otherEndClosed();
+                    }
+                  };
+                  wsRef.onclose = function(evt) {
+                    if (!tryFallbackOrClose(evt)) {
+                      if (!opened) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                    }
+                  };
+                }
+                bind(ws);
+              })();
             },
 
             _hostAndPort: function() { return this.host + ':' + this.port; },
@@ -40635,9 +40877,6 @@
                   plugin.needProxy.add(thisHandle._hostAndPort());
                 })
                 .catch(function (e) {
-                  // KLUDGE! This is just a workaround for a broken
-                  // proxy server - we should remove it when
-                  // crossorigin.me is fixed
                   console.warn('Fetch API failed, retrying with XMLHttpRequest');
                   thisHandle._performXMLHTTPRequest(targetURL, httpMethod, data, requestLines);
                 });
@@ -40711,8 +40950,20 @@
                   plugin.needProxy.add(thisHandle._hostAndPort());
                 };
                 retry.onerror = function() {
-                  thisHandle._otherEndClosed();
-                  console.error("Failed to download:\n" + url);
+                  if (plugin._isTunnelEnabled()) {
+                    var headerStr = (new TextDecoder('utf-8')).decode(new TextEncoder('utf-8').encode(requestLines[0])) + '\r\n';
+                    for (var i = 1; i < requestLines.length; i++) headerStr += requestLines[i].replace(/\r?$/, '') + '\r\n';
+                    headerStr += '\r\n';
+                    var headerBytes = new TextEncoder('utf-8').encode(headerStr);
+                    var totalLen = headerBytes.byteLength + (data ? data.byteLength : 0);
+                    var raw = new Uint8Array(totalLen);
+                    raw.set(headerBytes, 0);
+                    if (data) raw.set(data, headerBytes.byteLength);
+                    thisHandle._httpOverTunnel(raw);
+                  } else {
+                    thisHandle._otherEndClosed();
+                    console.error("Failed to download:\n" + url);
+                  }
                 };
                 retry.send(data);
               };
@@ -40950,9 +41201,139 @@
               this.hostAddress = hostAddress;
               this.host = plugin._reverseLookupNameForAddress(hostAddress);
               this.port = port;
+
+              if (plugin._isTunnelEnabled()) {
+                var url = this._httpTunnelUrl();
+
+                var thisHandle = this;
+                this.tunnelWS = new WebSocket(url);
+                this.tunnelWS.binaryType = "arraybuffer";
+                this.tunnelPendingConnect = true;
+                this.tunnelOpen = false;
+
+                this.tunnelWS.onopen = function() {
+                  var msg = JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port });
+                  thisHandle.tunnelWS.send(msg);
+                };
+                this.tunnelWS.onmessage = function(event) {
+                  if (typeof event.data === "string") {
+                    try {
+                      var m = JSON.parse(event.data);
+                      if (m.t === "ok") {
+                        thisHandle.tunnelPendingConnect = false;
+                        thisHandle.tunnelOpen = true;
+                        if (thisHandle.status !== plugin.Socket_Connected) {
+                          thisHandle.status = plugin.Socket_Connected;
+                          thisHandle._signalConnSemaphore();
+                          thisHandle._signalWriteSemaphore();
+                        }
+                        if (thisHandle.sendBuffer && thisHandle.sendBuffer.byteLength) {
+                          try { thisHandle.tunnelWS.send(thisHandle.sendBuffer); } catch(e) {}
+                          thisHandle.sendBuffer = null;
+                        }
+                      } else if (m.t === "err") {
+                        thisHandle.tunnelPendingConnect = false;
+                        thisHandle._otherEndClosed();
+                      } else if (m.t === "rc") {
+                        thisHandle.tunnelClosed = true;
+                        thisHandle._otherEndClosed();
+                      }
+                    } catch(e) {
+                    }
+                    return;
+                  }
+                  var bytes = new Uint8Array(event.data);
+                  if (!thisHandle.response || !thisHandle.response.length) {
+                    thisHandle.response = [ bytes ];
+                  } else {
+                    thisHandle.response.push(bytes);
+                  }
+                  thisHandle.responseReceived = true;
+                  thisHandle._signalReadSemaphore();
+                };
+                (function() {
+                  var triedFallback = false;
+                  function detach(ref){ try { ref.onopen = ref.onmessage = ref.onerror = ref.onclose = null; } catch(_) {} }
+                  function attachHandlers() {
+                    thisHandle.tunnelWS.binaryType = "arraybuffer";
+                    thisHandle.tunnelPendingConnect = true;
+                    thisHandle.tunnelWS.onopen = function() {
+                      var msg = JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port });
+                      thisHandle.tunnelWS.send(msg);
+                    };
+                    thisHandle.tunnelWS.onmessage = function(event) {
+                      if (typeof event.data === "string") {
+                        try {
+                          var m = JSON.parse(event.data);
+                          if (m.t === "ok") {
+                            thisHandle.tunnelPendingConnect = false;
+                            thisHandle.tunnelOpen = true;
+                            if (thisHandle.status !== plugin.Socket_Connected) {
+                              thisHandle.status = plugin.Socket_Connected;
+                              thisHandle._signalConnSemaphore();
+                              thisHandle._signalWriteSemaphore();
+                            }
+                            if (thisHandle.sendBuffer && thisHandle.sendBuffer.byteLength) {
+                              try { thisHandle.tunnelWS.send(thisHandle.sendBuffer); } catch(e) {}
+                              thisHandle.sendBuffer = null;
+                            }
+                          } else if (m.t === "err") {
+                            thisHandle.tunnelPendingConnect = false;
+                            thisHandle._otherEndClosed();
+                          } else if (m.t === "rc") {
+                            thisHandle.tunnelClosed = true;
+                            thisHandle._otherEndClosed();
+                          }
+                        } catch(e) {}
+                        return;
+                      }
+                      var bytes = new Uint8Array(event.data);
+                      if (!thisHandle.response || !thisHandle.response.length) {
+                        thisHandle.response = [ bytes ];
+                      } else {
+                        thisHandle.response.push(bytes);
+                      }
+                      thisHandle.responseReceived = true;
+                      thisHandle._signalReadSemaphore();
+                    };
+                    function tryFallbackOrClose(evt) {
+                      if (!thisHandle.tunnelOpen && !triedFallback) {
+                        triedFallback = true;
+                        try {
+                          detach(thisHandle.tunnelWS);
+                          var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+                          var alt = proto + "//" + location.host + "/tcp-tunnel";
+                          thisHandle.tunnelWS = new WebSocket(alt);
+                          attachHandlers();
+                          if (evt && evt.preventDefault) try { evt.preventDefault(); } catch(_) {}
+                          return true;
+                        } catch(_) {}
+                      }
+                      return false;
+                    }
+                    thisHandle.tunnelWS.onerror = function(evt) {
+                      if (!tryFallbackOrClose(evt)) {
+                        if (!thisHandle.tunnelOpen && thisHandle.tunnelPendingConnect) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                        thisHandle._otherEndClosed();
+                      }
+                    };
+                    thisHandle.tunnelWS.onclose = function(evt) {
+                      if (!tryFallbackOrClose(evt)) {
+                        if (!thisHandle.tunnelOpen && thisHandle.tunnelPendingConnect) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                        thisHandle._otherEndClosed();
+                      }
+                    };
+                  }
+                  attachHandlers();
+                })();
+                this.status = plugin.Socket_WaitingForConnection;
+                this._signalConnSemaphore();
+                return;
+              }
+
               this.status = plugin.Socket_Connected;
               this._signalConnSemaphore();
-              this._signalWriteSemaphore(); // Immediately ready to write
+              this._signalWriteSemaphore();
             },
 
             close: function() {
@@ -40962,6 +41343,10 @@
                 if (this.webSocket) {
                   this.webSocket.close();
                   this.webSocket = null;
+                }
+                if (this.tunnelWS) {
+                  this.tunnelWS.close();
+                  this.tunnelWS = null;
                 }
                 this.status = plugin.Socket_Unconnected;
                 this._signalConnSemaphore();
@@ -41006,7 +41391,7 @@
               } else {
                 this.response.shift();
               }
-              if (this.responseReceived && this.response.length === 0 && !this.webSocket) {
+              if (this.responseReceived && this.response.length === 0 && !this.webSocket && !this.tunnelWS) {
                 this.responseSentCompletly = true;
               }
 
@@ -41019,8 +41404,37 @@
               }
               this.lastSend = Date.now();
               var newBytes = data.bytes.subarray(start, end);
+
+              if (plugin._isTunnelEnabled() && this.tunnelWS) {
+                if (!this.tunnelOpen) {
+                  if (this.sendBuffer === null) {
+                    this.sendBuffer = newBytes.slice();
+                  } else {
+                    var newLen = this.sendBuffer.byteLength + newBytes.byteLength;
+                    var nb = new Uint8Array(newLen);
+                    nb.set(this.sendBuffer, 0);
+                    nb.set(newBytes, this.sendBuffer.byteLength);
+                    this.sendBuffer = nb;
+                  }
+                  var thisHandle = this;
+                  this.sendTimeout = self.setTimeout(function() {
+                    if (thisHandle.tunnelOpen && thisHandle.sendBuffer && thisHandle.sendBuffer.byteLength) {
+                      try { thisHandle.tunnelWS.send(thisHandle.sendBuffer); } catch(e) {}
+                      thisHandle.sendBuffer = null;
+                    }
+                  }, 50);
+                  return newBytes.byteLength;
+                }
+                try {
+                  this.tunnelWS.send(newBytes);
+                } catch(e) {
+                  this._otherEndClosed();
+                  return 0;
+                }
+                return newBytes.byteLength;
+              }
+
               if (this.sendBuffer === null) {
-                // Make copy of buffer otherwise the stream buffer will overwrite it on next call (inside Smalltalk image)
                 this.sendBuffer = newBytes.slice();
               } else {
                 var newLength = this.sendBuffer.byteLength + newBytes.byteLength;
@@ -41029,7 +41443,6 @@
                 newBuffer.set(newBytes, this.sendBuffer.byteLength);
                 this.sendBuffer = newBuffer;
               }
-              // Give image some time to send more data before performing requests
               this.sendTimeout = self.setTimeout(this._performRequest.bind(this), 50);
               return newBytes.byteLength;
             }
@@ -41070,6 +41483,8 @@
         primitiveResolverStartNameLookup: function(argCount) {
           if (argCount !== 1) return false;
 
+          var plugin = this;
+
           // Start new lookup, ignoring if one is in progress
           var lookup = this.lastLookup = this.interpreterProxy.stackValue(0).bytesAsString();
 
@@ -41080,70 +41495,120 @@
             this._signalLookupSemaphore();
           } else {
 
-            // Perform DNS request
-            var dnsQueryURL = "https://9.9.9.9:5053/dns-query?name=" + encodeURIComponent(this.lastLookup) + "&type=A";
-            var queryStarted = false;
-            if (self.fetch) {
+            // Perform DNS request via same-origin tunnel
+            if (!plugin._isTunnelEnabled()) {
+              this.status = this.Resolver_Ready;
+              this._signalLookupSemaphore();
+            } else {
+              var queryStarted = false;
               var thisHandle = this;
-              var init = {
-                method: "GET",
-                mode: "cors",
-                credentials: "omit",
-                cache: "no-store", // do not use the browser cache for DNS requests (a separate cache is kept)
-                referrer: "no-referrer",
-                referrerPolicy: "no-referrer",
-              };
-              self.fetch(dnsQueryURL, init)
-                .then(function(response) {
-                  return response.json();
-                })
-                .then(function(response) {
-                  thisHandle._addAddressFromResponseToLookupCache(response);
-                })
-                .catch(function(error) {
-                  console.error("Name lookup failed", error);
-                })
-                .then(function() {
-
-                  // If no other lookup is started, signal the receiver (ie resolver) is ready
+              try {
+                var opts = (typeof SqueakJS === "object" && SqueakJS.options) || {};
+                var pathOrUrl = opts.tcpTunnelPath;
+                var url;
+                if (typeof pathOrUrl === "string" && /^(ws|wss):\/\//i.test(pathOrUrl)) {
+                  url = pathOrUrl;
+                } else {
+                  var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+                  var base = (document.baseURI || (location.origin + location.pathname));
+                  var baseUrl;
+                  try { baseUrl = new URL(base, location.origin); } catch(_) { baseUrl = null; }
+                  if (baseUrl) {
+                    if (!baseUrl.pathname.endsWith("/")) {
+                      baseUrl.pathname = baseUrl.pathname.substring(0, baseUrl.pathname.lastIndexOf("/") + 1);
+                    }
+                    var rel = (typeof pathOrUrl === "string" && pathOrUrl.length) ? pathOrUrl : "tcp-tunnel";
+                    var finalPath = rel.charAt(0) === "/" ? rel : (baseUrl.pathname + rel);
+                    url = proto + "//" + location.host + finalPath;
+                  } else {
+                    url = proto + "//" + location.host + "/tcp-tunnel";
+                  }
+                }
+                var ws = new WebSocket(url);
+                ws.onopen = function() {
+                  try { ws.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { ws.close(); } catch(_) {} }
+                };
+                var finish = function() {
                   if (lookup === thisHandle.lastLookup) {
                     thisHandle.status = thisHandle.Resolver_Ready;
                     thisHandle._signalLookupSemaphore();
                   }
-                })
-              ;
-              queryStarted = true;
-            } else {
-              var thisHandle = this;
-              var lookupReady = function() {
-
-                // If no other lookup is started, signal the receiver (ie resolver) is ready
-                if (lookup === thisHandle.lastLookup) {
-                  thisHandle.status = thisHandle.Resolver_Ready;
-                  thisHandle._signalLookupSemaphore();
-                }
-              };
-              var httpRequest = new XMLHttpRequest();
-              httpRequest.open("GET", dnsQueryURL, true);
-              httpRequest.timeout = 2000; // milliseconds
-              httpRequest.responseType = "json";
-              httpRequest.onload = function(oEvent) {
-                thisHandle._addAddressFromResponseToLookupCache(this.response);
-                lookupReady();
-              };
-              httpRequest.onerror = function() {
-                console.error("Name lookup failed", httpRequest.statusText);
-                lookupReady();
-              };
-              httpRequest.send();
-
-              queryStarted = true;
+                  try { ws.close(); } catch(_) {}
+                };
+                ws.onmessage = function(ev) {
+                  if (typeof ev.data !== "string") return;
+                  try {
+                    var msg = JSON.parse(ev.data);
+                    if (msg && msg.t === "dns") {
+                      if (msg.r) {
+                        thisHandle._addAddressFromResponseToLookupCache(msg.r);
+                      }
+                      finish();
+                    }
+                  } catch(_) {
+                    finish();
+                  }
+                };
+                (function() {
+                  var triedFallback = false, opened = false;
+                  var bind = function(wsRef) {
+                    wsRef.onopen = function() {
+                      opened = true;
+                      try { wsRef.send(JSON.stringify({ t: "dns", h: lookup })); } catch(e) { try { wsRef.close(); } catch(_) {} }
+                    };
+                    wsRef.onmessage = function(ev) {
+                      if (typeof ev.data !== "string") return;
+                      try {
+                        var msg = JSON.parse(ev.data);
+                        if (msg && msg.t === "dns") {
+                          if (msg.r) {
+                            thisHandle._addAddressFromResponseToLookupCache(msg.r);
+                          }
+                          finish();
+                        }
+                      } catch(_) {
+                        finish();
+                      }
+                    };
+                    function tryFallback(evt) {
+                      if (!opened && !triedFallback) {
+                        triedFallback = true;
+                        try {
+                          var proto = (location.protocol === "https:") ? "wss:" : "ws:";
+                          var alt = proto + "//" + location.host + "/tcp-tunnel";
+                          ws = new WebSocket(alt);
+                          bind(ws);
+                          if (evt && evt.preventDefault) try { evt.preventDefault(); } catch(_) {}
+                          return true;
+                        } catch(_) {}
+                      }
+                      return false;
+                    }
+                    wsRef.onerror = function(evt) {
+                      if (!tryFallback(evt)) {
+                        if (!opened) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                        finish();
+                      }
+                    };
+                    wsRef.onclose = function(evt) {
+                      if (!tryFallback(evt)) {
+                        if (!opened) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
+                        finish();
+                      }
+                    };
+                  };
+                  bind(ws);
+                })();
+                queryStarted = true;
+            } catch(e) {
+              console.error("Name lookup failed", e);
             }
 
             // Mark the receiver (ie resolver) is busy
             if (queryStarted) {
               this.status = this.Resolver_Busy;
               this._signalLookupSemaphore();
+            }
             }
           }
 
@@ -41240,6 +41705,14 @@
                                             this.interpreterProxy.nilObject());
           return true;
         },
+        primitiveSocketAbortConnection: function(argCount) {
+          if (argCount !== 1) return false;
+          var handle = this.interpreterProxy.stackObjectValue(0).handle;
+          if (handle === undefined) return false;
+          try { handle.close(); } catch(_) {}
+          this.interpreterProxy.popthenPush(argCount + 1, this.interpreterProxy.nilObject());
+          return true;
+        },
 
         primitiveSocketCloseConnection: function(argCount) {
           if (argCount !== 1) return false;
@@ -41314,6 +41787,13 @@
 
           var res = handle.send(data, start, end);
           this.interpreterProxy.popthenPush(argCount + 1, res);
+          return true;
+        },
+        primitiveResolverHostNameSize: function(argCount) {
+          if (argCount !== 1) return false;
+          var name = this.lastLookup || '';
+          var len = (typeof name === 'string') ? name.length : 0;
+          this.interpreterProxy.popthenPush(argCount + 1, len);
           return true;
         },
 
@@ -42444,6 +42924,69 @@
     registerPlugin();
 
     })(); // Register module/plugin
+
+    (function UUIDPlugin() {
+      var moduleName = "UUIDPlugin (browser)";
+      var interpreterProxy = null;
+
+      function getModuleName() { return moduleName; }
+      function setInterpreter(interp) { interpreterProxy = interp; return true; }
+
+      function primitiveMakeUUID(argCount) {
+        if (!interpreterProxy) return false;
+        var bytes = new Uint8Array(16);
+        if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(bytes);
+        else for (var i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        var ba = interpreterProxy.instantiateClassindexableSize(interpreterProxy.classByteArray(), 16);
+        for (var j = 0; j < 16; j++) ba.bytes[j] = bytes[j];
+        interpreterProxy.popthenPush(argCount + 1, ba);
+        return true;
+      }
+
+      function registerPlugin() {
+        return {
+          getModuleName: getModuleName,
+          setInterpreter: setInterpreter,
+          primitiveMakeUUID: primitiveMakeUUID
+        };
+      }
+
+      if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+        Squeak.registerExternalModule("UUIDPlugin", registerPlugin());
+      } else if (typeof module !== "undefined" && module.exports) {
+        module.exports = registerPlugin();
+      }
+    })();
+
+    (function ClipboardExtendedPlugin() {
+      var moduleName = "ClipboardExtendedPlugin (browser)";
+      var interpreterProxy = null;
+
+      function getModuleName() { return moduleName; }
+      function setInterpreter(interp) { interpreterProxy = interp; return true; }
+
+      function ioCreateClipboard(argCount) {
+        if (!interpreterProxy) return false;
+        interpreterProxy.popthenPush(argCount + 1, 1);
+        return true;
+      }
+
+      function registerPlugin() {
+        return {
+          getModuleName: getModuleName,
+          setInterpreter: setInterpreter,
+          ioCreateClipboard: ioCreateClipboard
+        };
+      }
+
+      if (typeof Squeak === "object" && Squeak.registerExternalModule) {
+        Squeak.registerExternalModule("ClipboardExtendedPlugin", registerPlugin());
+      } else if (typeof module !== "undefined" && module.exports) {
+        module.exports = registerPlugin();
+      }
+    })();
 
     /* Smalltalk from Squeak4.5 with VMMaker 4.13.6 translated as JS source on 3 November 2014 1:52:20 pm */
     /* Automatically generated by
