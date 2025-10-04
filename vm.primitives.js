@@ -182,7 +182,7 @@ Object.subclass('Squeak.Primitives',
             case 64: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,true,false)); // String.basicAt:put:
             case 65: { // primitiveNext
                 if (argCount !== 0) return false;
-                var rcvr = this.stackReceiver();
+                var rcvr = this.vm.stackValue(argCount);
                 var arr = rcvr.pointers[Squeak.Stream_array];
                 var posOop = rcvr.pointers[Squeak.Stream_position];
                 var limOop = rcvr.pointers[Squeak.Stream_limit];
@@ -215,7 +215,7 @@ Object.subclass('Squeak.Primitives',
             case 66: { // primitiveNextPut:
                 if (argCount !== 1) return false;
                 var value = this.vm.top();
-                var rcvr = this.stackReceiver();
+                var rcvr = this.vm.stackValue(argCount);
                 var arr = rcvr.pointers[Squeak.Stream_array];
                 var posOop = rcvr.pointers[Squeak.Stream_position];
                 var limOop = rcvr.pointers[Squeak.Stream_limit];
@@ -255,7 +255,7 @@ Object.subclass('Squeak.Primitives',
             }
             case 67: { // primitiveAtEnd
                 if (argCount !== 0) return false;
-                var rcvr = this.stackReceiver();
+                var rcvr = this.vm.stackValue(argCount);
                 var posOop = rcvr.pointers[Squeak.Stream_position];
                 var limOop = rcvr.pointers[Squeak.Stream_limit];
                 if (typeof posOop !== "number" || typeof limOop !== "number") return false;
