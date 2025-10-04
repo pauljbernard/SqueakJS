@@ -1293,6 +1293,13 @@ function SocketPlugin() {
                                         this.interpreterProxy.nilObject());
       return true;
     },
+    primitiveSocketAbortConnection: function(argCount) {
+      if (argCount !== 1) return false;
+      var handle = this.interpreterProxy.stackObjectValue(0).handle;
+      if (handle === undefined) return false;
+      try { handle.close(); } catch(_) {}
+      return true;
+    },
 
     primitiveSocketCloseConnection: function(argCount) {
       if (argCount !== 1) return false;
@@ -1367,6 +1374,13 @@ function SocketPlugin() {
 
       var res = handle.send(data, start, end);
       this.interpreterProxy.popthenPush(argCount + 1, res);
+      return true;
+    },
+    primitiveResolverHostNameSize: function(argCount) {
+      if (argCount !== 1) return false;
+      var name = this.lastLookup || '';
+      var len = (typeof name === 'string') ? name.length : 0;
+      this.interpreterProxy.popthenPush(argCount + 1, len);
       return true;
     },
 
