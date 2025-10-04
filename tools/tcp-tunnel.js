@@ -157,6 +157,8 @@ function attachTcpTunnel(server, options = {}) {
 });
 
   return wss;
+}
+
 function attachTcpTunnelNoServer(server, options = {}) {
   const {
     paths = ['/tcp-tunnel'],
@@ -305,7 +307,6 @@ function attachTcpTunnelNoServer(server, options = {}) {
   });
 
   return wss;
-}
 }
 
 module.exports = { attachTcpTunnel, attachTcpTunnelNoServer };
