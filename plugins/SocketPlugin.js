@@ -1293,6 +1293,13 @@ function SocketPlugin() {
                                         this.interpreterProxy.nilObject());
       return true;
     },
+    primitiveSocketAbortConnection: function(argCount) {
+      if (argCount !== 1) return false;
+      var handle = this.interpreterProxy.stackObjectValue(0).handle;
+      if (handle === undefined) return false;
+      try { handle.close(); } catch(_) {}
+      return true;
+    },
 
     primitiveSocketCloseConnection: function(argCount) {
       if (argCount !== 1) return false;
