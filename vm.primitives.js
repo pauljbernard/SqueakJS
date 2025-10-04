@@ -51,7 +51,7 @@ Object.subclass('Squeak.Primitives',
     },
     initPlugins: function() {
         // Empty placeholder (can be replaced by a plugins module at runtime, before starting the Squeak interpreter)
-    }
+    },
 'debuglog', {
     _vmdbgEnabledAll: function() {
         try {
@@ -75,8 +75,6 @@ Object.subclass('Squeak.Primitives',
             else if (typeof console !== "undefined" && console.log) console.log("[VMDBG] " + JSON.stringify(obj));
         } catch (_) {}
     }
-},
-
 },
 'dispatch', {
     quickSendOther: function(rcvr, lobits) {
