@@ -10,7 +10,8 @@ SmalltalkCISpec {
         #SortedCollectionTest,
         #StackTest,
         #CharacterTest, #SymbolTest,
-        #BagTest, #SetTest
+        #BagTest, #SetTest,
+        #SqueakJSLargeIntegerPrimitiveTest
       ]
     }
   }

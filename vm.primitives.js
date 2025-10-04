@@ -360,7 +360,7 @@ Object.subclass('Squeak.Primitives',
             case 157: if (this.oldPrims) return this.primitiveFileSize(argCount);
                 break;  // fail 150-157 if fell through
             case 158: if (this.oldPrims) return this.primitiveFileWrite(argCount);
-                else this.vm.warnOnce("missing primitive: 158 (primitiveCompareWith)"); return false;
+                return this.namedPrimitive('LargeIntegers', 'primDigitCompareWith', argCount);
             case 159: if (this.oldPrims) return this.primitiveFileRename(argCount);
                 return this.popNandPushIntIfOK(argCount+1, this.stackSigned53BitInt(0) * 1664525 & 0xFFFFFFF); // primitiveHashMultiply
             case 160: if (this.oldPrims) return this.primitiveDirectoryCreate(argCount);
