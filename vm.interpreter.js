@@ -1243,7 +1243,7 @@ Object.subclass('Squeak.Interpreter',
         if (!success) {
             var sel = this.currentSelector && this.currentSelector.bytesAsString ? this.currentSelector.bytesAsString() : null;
             var mClass = (newMethod && newMethod.methodClass && newMethod.methodClass().className) ? newMethod.methodClass().className() : null;
-            this._vmdbgLog({site:"primFail", prim: primIndex, selector: sel, pc: this.pc, methodClass: mClass});
+            if (this && typeof this._vmdbgLog === "function") this._vmdbgLog({site:"primFail", prim: primIndex, selector: sel, pc: this.pc, methodClass: mClass});
         }
         if (success
             && this.sp !== sp - argCount
