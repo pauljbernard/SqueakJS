@@ -3,6 +3,10 @@ const http = require('http');
 const path = require('path');
 const net = require('net');
 
+const LOG_TUNNEL = !!process.env.LOG_TUNNEL;
+function logTunnel() { if (LOG_TUNNEL) console.log("[TCP-TUNNEL]", ...arguments); }
+function errTunnel() { if (LOG_TUNNEL) console.error("[TCP-TUNNEL]", ...arguments); }
+
 let WebSocket;
 try {
   WebSocket = require('ws');
@@ -38,6 +42,7 @@ function toPortList(value) {
 }
 
 function attachTcpTunnel(server, options = {}) {
+  logTunnel("attachTcpTunnel", options);
   const {
     path = '/tcp-tunnel',
     allowHosts = [],
@@ -62,6 +67,8 @@ function attachTcpTunnel(server, options = {}) {
   wss.on('connection', (ws, req) => {
   let sock = null;
   let connected = false;
+  let wsBytes = 0, tcpBytes = 0;
+
 
   ws.on('message', (msg) => {
     if (!connected) {
@@ -114,16 +121,19 @@ function attachTcpTunnel(server, options = {}) {
 
       sock = net.connect({ host, port }, () => {
         connected = true;
+        logTunnel("tcp connected", { host, port });
         try { ws.send(JSON.stringify({ t: 'ok' })); } catch(e) {}
       });
 
       sock.on('data', (data) => {
+        tcpBytes += data.length || 0;
         if (ws.readyState === WebSocket.OPEN) {
           try { ws.send(data); } catch(e) {}
         }
       });
 
       sock.on('error', (e) => {
+        errTunnel("tcp error", e && (e.stack || e.message || e));
         if (ws.readyState === WebSocket.OPEN) {
           try { ws.send(JSON.stringify({ t: 'err', code: 500, msg: e && e.message ? e.message : 'socket error' })); } catch(_) {}
         }
@@ -142,16 +152,19 @@ function attachTcpTunnel(server, options = {}) {
 
     if (Buffer.isBuffer(msg)) {
       if (sock && !sock.destroyed) {
+        wsBytes += msg.length || msg.byteLength || 0;
         try { sock.write(msg); } catch(_) {}
       }
     }
   });
 
   ws.on('close', () => {
+    logTunnel("ws close", { wsBytes, tcpBytes });
     if (sock && !sock.destroyed) try { sock.destroy(); } catch(_) {}
   });
 
-  ws.on('error', () => {
+  ws.on('error', (e) => {
+    errTunnel("ws error", e && (e.stack || e.message || e));
     if (sock && !sock.destroyed) try { sock.destroy(); } catch(_) {}
   });
 });
@@ -160,6 +173,7 @@ function attachTcpTunnel(server, options = {}) {
 }
 
 function attachTcpTunnelNoServer(server, options = {}) {
+  logTunnel("attachTcpTunnelNoServer", options);
   const {
     paths = ['/tcp-tunnel'],
     allowHosts = [],
@@ -205,6 +219,7 @@ function attachTcpTunnelNoServer(server, options = {}) {
   server.on('upgrade', (req, socket, head) => {
     const pathName = normalizeIncomingPath(req.url || '');
     if (!acceptable.has(pathName)) return;
+    logTunnel("upgrade", { path: pathName, remote: req && req.socket && (req.socket.remoteAddress + ":" + req.socket.remotePort) });
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req);
     });
@@ -264,10 +279,13 @@ function attachTcpTunnelNoServer(server, options = {}) {
 
         sock = net.connect({ host, port }, () => {
           connected = true;
+          logTunnel("tcp connected", { host, port });
           try { ws.send(JSON.stringify({ t: 'ok' })); } catch(e) {}
         });
 
+        let wsBytes = 0, tcpBytes = 0;
         sock.on('data', (data) => {
+          tcpBytes += data.length || 0;
           if (ws.readyState === WebSocket.OPEN) {
             try { ws.send(data); } catch(e) {}
           }
@@ -298,10 +316,12 @@ function attachTcpTunnelNoServer(server, options = {}) {
     });
 
     ws.on('close', () => {
+      logTunnel("ws close", { wsBytes, tcpBytes });
       if (sock && !sock.destroyed) try { sock.destroy(); } catch(_) {}
     });
 
-    ws.on('error', () => {
+    ws.on('error', (e) => {
+      errTunnel("ws error", e && (e.stack || e.message || e));
       if (sock && !sock.destroyed) try { sock.destroy(); } catch(_) {}
     });
   });
