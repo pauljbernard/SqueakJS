@@ -2332,6 +2332,10 @@ Object.subclass('Squeak.Primitives',
     primitiveSetGCBiasToGrowGCLimit: function(argCount) {
         return this.fakePrimitive(".primitiveSetGCBiasToGrowGCLimit", 0, argCount);
     },
+    primitivePluginBrowserReady: function(argCount) {
+        // Older images check whether the browser plugin is available. Always true in SqueakJS.
+        return this.popNandPushIfOK(argCount + 1, this.vm.trueObj);
+    },
 },
 'time', {
     primitiveRelinquishProcessorForMicroseconds: function(argCount) {
@@ -2378,6 +2382,9 @@ Object.subclass('Squeak.Primitives',
         if (!this.microsecondClockLocalState)
             this.microsecondClockLocalState = {epoch: Squeak.Epoch, millis: 0, micros: 0};
         return this.microsecondClock(this.microsecondClockLocalState);
+    },
+    primitiveMillisecondClockMask: function(argCount) {
+        return this.popNandPushIntIfOK(argCount + 1, Squeak.MillisecondClockMask);
     },
     primitiveUtcWithOffset: function(argCount) {
         var d = new Date();
