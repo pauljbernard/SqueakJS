@@ -227,6 +227,9 @@ function attachTcpTunnelNoServer(server, options = {}) {
 
   wss.on('connection', (ws, req) => {
     let sock = null;
+    let tcpEnded = false;
+    let wsClosed = false;
+    let shutdownTimer = null;
     let connected = false;
     let wsBytes = 0, tcpBytes = 0;
 
@@ -348,6 +351,7 @@ function attachTcpTunnelNoServer(server, options = {}) {
         });
 
         sock.on('end', () => {
+          tcpEnded = true;
           logTunnel("tcp end", { wsBytes, tcpBytes });
           if (ws.readyState === WebSocket.OPEN) {
             try { ws.send(JSON.stringify({ t: 'rc' })); } catch(_) {}
@@ -356,6 +360,7 @@ function attachTcpTunnelNoServer(server, options = {}) {
 
         sock.on('close', (hadError) => {
           logTunnel("tcp close", { hadError: !!hadError, wsBytes, tcpBytes });
+          if (shutdownTimer) { try { clearTimeout(shutdownTimer); } catch(_) {} shutdownTimer = null; }
           if (ws.readyState === WebSocket.OPEN) {
             try { ws.close(); } catch(_) {}
           }
@@ -382,10 +387,16 @@ function attachTcpTunnelNoServer(server, options = {}) {
     });
 
     ws.on('close', (evt) => {
+      wsClosed = true;
       clearHandshakeTimer();
       const details = evt ? { code: evt.code, reason: evt.reason, wasClean: evt.wasClean } : {};
       logTunnel("ws close", Object.assign({ wsBytes, tcpBytes }, details));
-      if (sock && !sock.destroyed) try { sock.destroy(); } catch(_) {}
+      if (sock && !sock.destroyed) {
+        try { sock.end(); } catch(_) {}
+        if (!shutdownTimer) {
+          shutdownTimer = setTimeout(() => { try { sock.destroy(); } catch(_) {} }, 5000);
+        }
+      }
     });
 
     ws.on('error', (e) => {
