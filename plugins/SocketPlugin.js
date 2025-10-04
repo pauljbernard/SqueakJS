@@ -23,6 +23,20 @@
 
 function SocketPlugin() {
   "use strict";
+  function netLogEnabled() {
+    try {
+      if (typeof window !== "undefined" && window.SqueakDebugNet) return true;
+      if (typeof Squeak !== "undefined" && Squeak && Squeak.debugNet) return true;
+    } catch (_e) {}
+    return false;
+  }
+  function netLog() {
+    if (!netLogEnabled()) return null;
+    try {
+      if (console.debug) return console.debug.bind(console, "[SocketPlugin]");
+      return console.log.bind(console, "[SocketPlugin]");
+    } catch (_e) { return null; }
+  }
 
   return {
     getModuleName: function() { return 'SocketPlugin (http-only, tunnel-enabled)'; },
@@ -519,10 +533,12 @@ function SocketPlugin() {
           httpRequest.responseType = "arraybuffer";
 
           httpRequest.onload = function (oEvent) {
+            var __nl = netLog(); if (__nl) __nl("xhr load", httpMethod, thisHandle._getURL(targetURL), { status: this.status });
             thisHandle._handleXMLHTTPResponse(this);
           };
 
           httpRequest.onerror = function(e) {
+            var __nl = netLog(); if (__nl) console.error("[SocketPlugin] xhr error", thisHandle && thisHandle._getURL && thisHandle._getURL(targetURL), this && this.status);
             var url = thisHandle._getURL(targetURL, true);
             console.warn('Retrying with CORS proxy: ' + url);
             var retry = new XMLHttpRequest();
@@ -532,11 +548,13 @@ function SocketPlugin() {
                 retry.setRequestHeader("X-Requested-With", "XMLHttpRequest");
             }
             retry.onload = function(oEvent) {
+              var __nl = netLog(); if (__nl) __nl("retry xhr load", url, { status: this.status });
               console.log('Success: ' + url);
               thisHandle._handleXMLHTTPResponse(this);
               plugin.needProxy.add(thisHandle._hostAndPort());
             };
             retry.onerror = function() {
+              var __nl = netLog(); if (__nl) console.error("[SocketPlugin] retry xhr error", url, this && this.status);
               if (plugin._isTunnelEnabled()) {
                 var headerStr = (new TextDecoder('utf-8')).decode(new TextEncoder('utf-8').encode(requestLines[0])) + '\r\n';
                 for (var i = 1; i < requestLines.length; i++) headerStr += requestLines[i].replace(/\r?$/, '') + '\r\n';
@@ -796,14 +814,17 @@ function SocketPlugin() {
             var thisHandle = this;
             this.tunnelWS = new WebSocket(url);
             this.tunnelWS.binaryType = "arraybuffer";
+            (function(pth){ var __nl = netLog(); if (__nl) __nl("tunnel attempting", pth); })(url);
             this.tunnelPendingConnect = true;
             this.tunnelOpen = false;
 
             this.tunnelWS.onopen = function() {
+              var __nl = netLog(); if (__nl) __nl("tunnel open", url);
               var msg = JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port });
               thisHandle.tunnelWS.send(msg);
             };
             this.tunnelWS.onmessage = function(event) {
+              var __nl = netLog(); if (__nl && event && event.data && typeof event.data !== "string") __nl("tunnel message", url, { bytes: event.data.byteLength || event.data.length });
               if (typeof event.data === "string") {
                 try {
                   var m = JSON.parse(event.data);
@@ -846,6 +867,7 @@ function SocketPlugin() {
                 thisHandle.tunnelWS.binaryType = "arraybuffer";
                 thisHandle.tunnelPendingConnect = true;
                 thisHandle.tunnelWS.onopen = function() {
+                  var __nl = netLog(); if (__nl) __nl("handle tunnel open", thisHandle.tunnelWS && thisHandle.tunnelWS.url);
                   var msg = JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port });
                   thisHandle.tunnelWS.send(msg);
                 };
@@ -885,6 +907,7 @@ function SocketPlugin() {
                   thisHandle._signalReadSemaphore();
                 };
                 function tryFallbackOrClose(evt) {
+                  var __nl = netLog(); if (__nl) __nl("tunnel fallback or close", thisHandle.tunnelWS && thisHandle.tunnelWS.url);
                   if (!thisHandle.tunnelOpen && !triedFallback) {
                     triedFallback = true;
                     try {
@@ -900,12 +923,14 @@ function SocketPlugin() {
                   return false;
                 }
                 thisHandle.tunnelWS.onerror = function(evt) {
+                  var __nl = netLog(); if (__nl) console.error("[SocketPlugin] handle tunnel error", thisHandle.tunnelWS && thisHandle.tunnelWS.url);
                   if (!tryFallbackOrClose(evt)) {
                     if (!thisHandle.tunnelOpen && thisHandle.tunnelPendingConnect) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
                     thisHandle._otherEndClosed();
                   }
                 };
                 thisHandle.tunnelWS.onclose = function(evt) {
+                  var __nl = netLog(); if (__nl) __nl("handle tunnel close", thisHandle.tunnelWS && thisHandle.tunnelWS.url, { code: evt && evt.code, reason: evt && evt.reason, wasClean: evt && evt.wasClean });
                   if (!tryFallbackOrClose(evt)) {
                     if (!thisHandle.tunnelOpen && thisHandle.tunnelPendingConnect) plugin._disableTunnel("WebSocket handshake failed for TCP tunnel");
                     thisHandle._otherEndClosed();
@@ -1069,6 +1094,11 @@ function SocketPlugin() {
     },
 
     primitiveResolverStartNameLookup: function(argCount) {
+        try {
+            var nameObj = this.interpreterProxy.stackObjectValue(0);
+            var nm = nameObj && nameObj.bytes ? this.interpreterProxy.bytesAsString(nameObj) : null;
+            var __nl = netLog(); if (__nl) __nl("DNS lookup start", nm);
+        } catch(_) {}
       if (argCount !== 1) return false;
 
       var plugin = this;

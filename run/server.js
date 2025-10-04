@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+const LOG_CONNECT = !!process.env.LOG_CONNECT;
+function logConnect() { if (LOG_CONNECT) console.log("[CONNECT]", ...arguments); }
+function errConnect() { if (LOG_CONNECT) console.error("[CONNECT]", ...arguments); }
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
@@ -184,29 +187,37 @@ function hostPortAllowed(hostname, port) {
   return hostOk && portOk;
 }
 server.on('connect', (req, clientSocket, head) => {
+  const startedAt = Date.now();
   const hp = String(req.url || '');
+  logConnect('request', hp, 'headers:', req.headers);
   const [host, portStr] = hp.split(':');
   const port = parseInt(portStr, 10);
 
   if (!host || !Number.isInteger(port) || port <= 0 || port > 65535 || !hostPortAllowed(host, port)) {
+    logConnect('forbidden', hp);
     try { clientSocket.write('HTTP/1.1 403 Forbidden\r\n\r\n'); } catch (_) {}
     try { clientSocket.destroy(); } catch (_) {}
     return;
   }
 
+  let upBytes = 0, downBytes = 0;
   const upstream = net.connect(port, host, () => {
+    logConnect('upstream connected', hp, 'elapsedMs=', Date.now() - startedAt);
     try { clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n'); } catch (_) {}
     if (head && head.length) upstream.write(head);
+    clientSocket.on('data', (chunk) => { upBytes += chunk.length; });
+    upstream.on('data', (chunk) => { downBytes += chunk.length; });
     clientSocket.pipe(upstream);
     upstream.pipe(clientSocket);
   });
 
   const closeBoth = () => {
+    logConnect('connection closed', hp, { upBytes, downBytes, elapsedMs: Date.now() - startedAt });
     try { upstream.destroy(); } catch (_) {}
     try { clientSocket.destroy(); } catch (_) {}
   };
-  upstream.on('error', closeBoth);
-  clientSocket.on('error', closeBoth);
+  upstream.on('error', (err) => { errConnect('upstream error', hp, err && (err.stack || err.message || err)); closeBoth(); });
+  clientSocket.on('error', (err) => { errConnect('client error', hp, err && (err.stack || err.message || err)); closeBoth(); });
   upstream.on('close', closeBoth);
   clientSocket.on('close', closeBoth);
 });

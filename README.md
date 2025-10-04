@@ -1,3 +1,23 @@
+Debugging network issues
+========================
+
+Client-side (browser)
+- Enable verbose network logs at runtime without rebuild:
+  In DevTools console, set:
+    window.SqueakDebugNet = true
+  or set Squeak.debugNet = true before initializing SqueakJS.
+- Logs include:
+  - HTTP/XHR: start, status, and errors
+  - Tunnel WS: open/close/errors, fallback attempts, message byte counts
+  - DNS over tunnel: lookup start
+
+Server-side
+- Enable logs via environment variables when starting the dev server:
+  LOG_CONNECT=1 LOG_TUNNEL=1 npm start
+- LOG_CONNECT prints CONNECT proxy activity, connection timing, byte counts, and errors.
+- LOG_TUNNEL prints WebSocket tunnel attach/upgrade and connection lifecycle.
+
+
 SqueakJS: A Squeak VM for the Web and Node.js
 =============================================
 
