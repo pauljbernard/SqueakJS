@@ -204,6 +204,7 @@ function SocketPlugin() {
         tunnelOpen: false,
         tunnelClosed: false,
         tunnelPendingConnect: false,
+        tunnelNeedsTLS: false,
 
 
         sendBuffer: null,
@@ -262,7 +263,9 @@ function SocketPlugin() {
           ws.binaryType = "arraybuffer";
           ws.onopen = function() {
             try {
-              ws.send(JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port }));
+              var handshake = { t: "c", h: thisHandle.host, p: thisHandle.port };
+              if (thisHandle.tunnelNeedsTLS) handshake.tls = true;
+              ws.send(JSON.stringify(handshake));
             } catch(e) {
               try { ws.close(); } catch(_) {}
               thisHandle._otherEndClosed();
@@ -298,7 +301,9 @@ function SocketPlugin() {
               wsRef.onopen = function() {
                 opened = true;
                 try {
-                  wsRef.send(JSON.stringify({ t: "c", h: thisHandle.host, p: thisHandle.port }));
+                  var handshake = { t: "c", h: thisHandle.host, p: thisHandle.port };
+                  if (thisHandle.tunnelNeedsTLS) handshake.tls = true;
+                  wsRef.send(JSON.stringify(handshake));
                 } catch(e) {
                   try { wsRef.close(); } catch(_) {}
                   thisHandle._otherEndClosed();
@@ -437,6 +442,8 @@ function SocketPlugin() {
               seenWebSocket = true;
             }
           }
+
+          this.tunnelNeedsTLS = this.port === 443;
 
           if (httpMethod === "GET" && seenUpgrade && seenWebSocket) {
             this._performWebSocketRequest(targetURL, httpMethod, data, headerLines);
