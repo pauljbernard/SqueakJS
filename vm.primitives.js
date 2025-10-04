@@ -53,6 +53,31 @@ Object.subclass('Squeak.Primitives',
         // Empty placeholder (can be replaced by a plugins module at runtime, before starting the Squeak interpreter)
     }
 },
+'debuglog', {
+    _vmdbgEnabledAll: function() {
+        try {
+            if (typeof window !== "undefined" && window.SqueakDebugVM) return true;
+            if (typeof process !== "undefined" && process && process.env && process.env.SQUEAK_DEBUG_VM) return true;
+        } catch (_) {}
+        return false;
+    },
+    _vmdbgEnabledStream: function() {
+        try {
+            if (typeof window !== "undefined" && (window.SqueakDebugVM || window.SqueakDebugStream)) return true;
+            if (typeof process !== "undefined" && process && process.env && (process.env.SQUEAK_DEBUG_VM || process.env.SQUEAK_DEBUG_STREAM)) return true;
+        } catch (_) {}
+        return false;
+    },
+    _vmdbgLog: function(obj, streamOnly) {
+        try {
+            var on = streamOnly ? this._vmdbgEnabledStream() : this._vmdbgEnabledAll();
+            if (!on) return;
+            if (typeof console !== "undefined" && console.debug) console.debug("[VMDBG] " + JSON.stringify(obj));
+            else if (typeof console !== "undefined" && console.log) console.log("[VMDBG] " + JSON.stringify(obj));
+        } catch (_) {}
+    }
+
+},
 'dispatch', {
     quickSendOther: function(rcvr, lobits) {
         // returns true if it succeeds
@@ -186,21 +211,25 @@ Object.subclass('Squeak.Primitives',
                 var arr = rcvr.pointers[Squeak.Stream_array];
                 var posOop = rcvr.pointers[Squeak.Stream_position];
                 var limOop = rcvr.pointers[Squeak.Stream_limit];
+                var spur = !!this.vm.image.isSpur;
                 if (typeof posOop !== "number" || typeof limOop !== "number" || !arr) return false;
                 var pos = posOop | 0;
                 var lim = limOop | 0;
                 if (pos >= lim) return false;
                 var index = pos + 1; // Smalltalk is 1-based
-                var value;
+                var value, kind = "unknown";
                 if (arr.isPointers && arr.isPointers()) {
                     value = arr.pointers[index - 1];
+                    kind = "pointers";
                 } else if (arr.isWords && arr.isWords()) {
                     value = this.pos32BitIntFor(arr.words[index - 1]);
+                    kind = "words";
                 } else if (arr.isBytes && arr.isBytes()) {
                     if (arr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
                         value = this.charFromInt(arr.bytes[index - 1] & 0xFF);
                     else
                         value = arr.bytes[index - 1] & 0xFF;
+                    kind = "bytes";
                 } else {
                     this.vm.push(arr);
                     this.vm.push(index);
@@ -208,7 +237,14 @@ Object.subclass('Squeak.Primitives',
                     if (!this.success) return false;
                     this.vm.pop(); // remove index
                     this.vm.pop(); // remove array
+                    kind = "other";
                 }
+                this._vmdbgLog({
+                    site: "prim65", op: "read", spur: spur,
+                    rcvrClass: rcvr && rcvr.sqClass && rcvr.sqClass.className ? rcvr.sqClass.className() : "rcvr",
+                    arrClass: arr && arr.sqClass && arr.sqClass.className ? arr.sqClass.className() : "arr",
+                    index: index, kind: kind, valueType: typeof value
+                }, true);
                 rcvr.pointers[Squeak.Stream_position] = pos + 1;
                 return this.popNandPushIfOK(argCount + 1, value);
             }
@@ -219,24 +255,28 @@ Object.subclass('Squeak.Primitives',
                 var arr = rcvr.pointers[Squeak.Stream_array];
                 var posOop = rcvr.pointers[Squeak.Stream_position];
                 var limOop = rcvr.pointers[Squeak.Stream_limit];
+                var spur = !!this.vm.image.isSpur;
                 if (typeof posOop !== "number" || typeof limOop !== "number" || !arr) return false;
                 var pos = posOop | 0;
                 var lim = limOop | 0;
                 if (pos >= lim) return false;
                 var index = pos + 1;
+                var kind = "unknown", ok = true, note = null;
                 if (arr.isPointers && arr.isPointers()) {
                     arr.pointers[index - 1] = value;
                     arr.dirty = true;
+                    kind = "pointers";
                 } else if (arr.isWords && arr.isWords()) {
                     var w = this.stackSigned32BitInt(0); // may fail if not int
-                    if (!this.success) { this.success = true; return false; }
+                    if (!this.success) { this.success = true; ok = false; this._vmdbgLog({site:"prim66", op:"write", spur:spur, kind:"words", rcvrClass: rcvr.sqClass.className(), arrClass: arr.sqClass.className(), index:index, valueClass: value && value.sqClass && value.sqClass.className ? value.sqClass.className() : (typeof value), ok:false, note:"non-int for words"}, true); return false; }
                     arr.words[index - 1] = w;
+                    kind = "words";
                 } else if (arr.isBytes && arr.isBytes()) {
                     var byte;
                     if (value && value.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCharacter]) {
                         byte = this.charToInt(value) & 0xFF;
                     } else if (typeof value === "number") {
-                        if (value < 0 || value > 255) return false;
+                        if (value < 0 || value > 255) { ok = false; note = "byte out of range"; this._vmdbgLog({site:"prim66", op:"write", spur:spur, kind:"bytes", rcvrClass: rcvr.sqClass.className(), arrClass: arr.sqClass.className(), index:index, valueType: typeof value, value:value, ok:false, note:note}, true); return false; }
                         byte = value & 0xFF;
                     } else {
                         return false;
@@ -252,6 +292,13 @@ Object.subclass('Squeak.Primitives',
                 }
                 rcvr.pointers[Squeak.Stream_position] = pos + 1;
                 return this.popNandPushIfOK(argCount + 1, value);
+                this._vmdbgLog({
+                    site:"prim66", op:"write", spur:spur,
+                    rcvrClass: rcvr && rcvr.sqClass && rcvr.sqClass.className ? rcvr.sqClass.className() : "rcvr",
+                    arrClass: arr && arr.sqClass && arr.sqClass.className ? arr.sqClass.className() : "arr",
+                    index:index, kind:kind, ok:true
+                }, true);
+
             }
             case 67: { // primitiveAtEnd
                 if (argCount !== 0) return false;
@@ -259,7 +306,9 @@ Object.subclass('Squeak.Primitives',
                 var posOop = rcvr.pointers[Squeak.Stream_position];
                 var limOop = rcvr.pointers[Squeak.Stream_limit];
                 if (typeof posOop !== "number" || typeof limOop !== "number") return false;
-                var atEnd = (posOop | 0) >= (limOop | 0);
+                var posI = (posOop | 0), limI = (limOop | 0);
+                var atEnd = posI >= limI;
+                this._vmdbgLog({site:"prim67", op:"atEnd", spur:!!this.vm.image.isSpur, rcvrClass: rcvr && rcvr.sqClass && rcvr.sqClass.className ? rcvr.sqClass.className() : "rcvr", pos: posI, lim: limI, atEnd: atEnd}, true);
                 return this.popNandPushIfOK(argCount + 1, atEnd ? this.vm.trueObj : this.vm.falseObj);
             }
             // StorageManagement Primitives (68-79)
@@ -1009,6 +1058,7 @@ Object.subclass('Squeak.Primitives',
         return 0;
     },
     charFromInt: function(ascii) {
+        if (ascii < 0 || ascii > 255) this._vmdbgLog({site:"charFromInt", arg:ascii, note:"outOfRange"}, true);
         var charTable = this.vm.specialObjects[Squeak.splOb_CharacterTable];
         var char = charTable.pointers[ascii];
         if (char) return char;
@@ -1018,12 +1068,15 @@ Object.subclass('Squeak.Primitives',
         return char;
     },
     charFromIntSpur: function(unicode) {
+        if (unicode < 0 || unicode > 0x10FFFF) this._vmdbgLog({site:"charFromIntSpur", arg:unicode, note:"outOfRange"}, true);
         return this.vm.image.getCharacter(unicode);
     },
     charToInt: function(obj) {
+        if (!obj || obj.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter]) this._vmdbgLog({site:"charToInt", argType: obj && obj.sqClass && obj.sqClass.className ? obj.sqClass.className() : typeof obj, note:"nonCharacter"}, true);
         return obj.pointers[0];
     },
     charToIntSpur: function(obj) {
+        if (!obj || obj.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter]) this._vmdbgLog({site:"charToIntSpur", argType: obj && obj.sqClass && obj.sqClass.className ? obj.sqClass.className() : typeof obj, note:"nonCharacter"}, true);
         return obj.hash;
     },
     makeFloat: function(value) {
@@ -1151,6 +1204,7 @@ Object.subclass('Squeak.Primitives',
         var array = this.stackNonInteger(1);
         var index = this.stackPos32BitInt(0); //note non-int returns zero
         if (!this.success) return array;
+        var spur = !!this.vm.image.isSpur;
         var info;
         if (cameFromBytecode) {// fast entry checks cache
             info = this.atCache[array.hash & this.atCacheMask];
@@ -1169,12 +1223,16 @@ Object.subclass('Squeak.Primitives',
             return array.pointers[index-1];
         if (array.isPointers())   //pointers...   normal at:
             return array.pointers[index-1+info.ivarOffset];
-        if (array.isWords()) // words...
-            if (info.convertChars) return this.charFromInt(array.words[index-1] & 0x3FFFFFFF);
-            else return this.pos32BitIntFor(array.words[index-1]);
-        if (array.isBytes()) // bytes...
-            if (info.convertChars) return this.charFromInt(array.bytes[index-1] & 0xFF);
-            else return array.bytes[index-1] & 0xFF;
+        if (array.isWords()) { // words...
+            var res = info.convertChars ? this.charFromInt(array.words[index-1] & 0x3FFFFFFF) : this.pos32BitIntFor(array.words[index-1]);
+            this._vmdbgLog({site:"objectAt", op:"read", spur:spur, rcvrClass: array.sqClass.className(), index:index, convertChars:!!info.convertChars, isWords:true}, true);
+            return res;
+        }
+        if (array.isBytes()) { // bytes...
+            var resB = info.convertChars ? this.charFromInt(array.bytes[index-1] & 0xFF) : array.bytes[index-1] & 0xFF;
+            this._vmdbgLog({site:"objectAt", op:"read", spur:spur, rcvrClass: array.sqClass.className(), index:index, convertChars:!!info.convertChars, isBytes:true, valueType: typeof resB}, true);
+            return resB;
+        }
         // methods must simulate Squeak's method indexing
         var offset = array.pointersSize() * 4;
         if (index-1-offset < 0) {this.success = false; return array;} //reading lits as bytes
@@ -1185,6 +1243,7 @@ Object.subclass('Squeak.Primitives',
         var array = this.stackNonInteger(2);
         var index = this.stackPos32BitInt(1); //note non-int returns zero
         if (!this.success) return array;
+        var spur = !!this.vm.image.isSpur;
         var info;
         if (cameFromBytecode) {// fast entry checks cache
             info = this.atPutCache[array.hash & this.atCacheMask];
@@ -1216,13 +1275,14 @@ Object.subclass('Squeak.Primitives',
             if (convertChars) {
                 // put a character...
                 if (objToPut.sqClass !== this.vm.specialObjects[Squeak.splOb_ClassCharacter])
-                    {this.success = false; return objToPut;}
+                    {this._vmdbgLog({site:"objectAtPut", op:"write", spur:spur, rcvrClass: array.sqClass.className(), index:index, isWords:true, convertChars:true, valueClass: objToPut && objToPut.sqClass && objToPut.sqClass.className ? objToPut.sqClass.className() : (typeof objToPut), ok:false}, true); this.success = false; return objToPut;}
                 intToPut = this.charToInt(objToPut);
-                if (typeof intToPut !== "number") {this.success = false; return objToPut;}
+                if (typeof intToPut !== "number") {this._vmdbgLog({site:"objectAtPut", op:"write", spur:spur, rcvrClass: array.sqClass.className(), index:index, isWords:true, convertChars:true, valueClass: (typeof intToPut), ok:false}, true); this.success = false; return objToPut;}
             } else {
                 intToPut = this.stackPos32BitInt(0);
             }
             if (this.success) array.words[index-1] = intToPut;
+            this._vmdbgLog({site:"objectAtPut", op:"write", spur:spur, rcvrClass: array.sqClass.className(), index:index, isWords:true, convertChars:!!convertChars, ok:this.success!==false}, true);
             return objToPut;
         }
         // bytes...

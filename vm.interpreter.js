@@ -197,6 +197,23 @@ Object.subclass('Squeak.Interpreter',
             } catch (error) {
                 console.error("Failed to hack " + each.method + " with error " + error);
             }
+},
+'debuglog', {
+    _vmdbgEnabledAll: function() {
+        try {
+            if (typeof window !== "undefined" && window.SqueakDebugVM) return true;
+            if (typeof process !== "undefined" && process && process.env && process.env.SQUEAK_DEBUG_VM) return true;
+        } catch (_) {}
+        return false;
+    },
+    _vmdbgLog: function(obj) {
+        try {
+            if (!this._vmdbgEnabledAll()) return;
+            if (typeof console !== "undefined" && console.debug) console.debug("[VMDBG] " + JSON.stringify(obj));
+            else if (typeof console !== "undefined" && console.log) console.log("[VMDBG] " + JSON.stringify(obj));
+        } catch (_) {}
+    }
+
 
         }, this);
     },
@@ -1223,6 +1240,11 @@ Object.subclass('Squeak.Interpreter',
         var sp = this.sp;
         var context = this.activeContext;
         var success = this.primHandler.doPrimitive(primIndex, argCount, newMethod);
+        if (!success) {
+            var sel = this.currentSelector && this.currentSelector.bytesAsString ? this.currentSelector.bytesAsString() : null;
+            var mClass = (newMethod && newMethod.methodClass && newMethod.methodClass().className) ? newMethod.methodClass().className() : null;
+            this._vmdbgLog({site:"primFail", prim: primIndex, selector: sel, pc: this.pc, methodClass: mClass});
+        }
         if (success
             && this.sp !== sp - argCount
             && context === this.activeContext
