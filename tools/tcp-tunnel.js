@@ -386,10 +386,10 @@ function attachTcpTunnelNoServer(server, options = {}) {
       }
     });
 
-    ws.on('close', (evt) => {
+    ws.on('close', (code, reason) => {
       wsClosed = true;
       clearHandshakeTimer();
-      const details = evt ? { code: evt.code, reason: evt.reason, wasClean: evt.wasClean } : {};
+      const details = { code: code, reason: reason };
       logTunnel("ws close", Object.assign({ wsBytes, tcpBytes }, details));
       if (sock && !sock.destroyed) {
         try { sock.end(); } catch(_) {}
