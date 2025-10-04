@@ -1298,6 +1298,7 @@ function SocketPlugin() {
       var handle = this.interpreterProxy.stackObjectValue(0).handle;
       if (handle === undefined) return false;
       try { handle.close(); } catch(_) {}
+      this.interpreterProxy.popthenPush(argCount + 1, this.interpreterProxy.nilObject());
       return true;
     },
 

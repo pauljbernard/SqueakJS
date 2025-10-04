@@ -103,19 +103,74 @@ Object.subclass('Squeak.Primitives',
             // LargeInteger Primitives (20-39)
             // 32-bit logic is aliased to Integer prims above
             case 20: this.vm.warnOnce("missing primitive: 20 (primitiveRemLargeIntegers)"); return false;
+<<<<<<< Updated upstream
             case 21: this.vm.warnOnce("missing primitive: 21 (primitiveAddLargeIntegers)"); return false;
             case 22: this.vm.warnOnce("missing primitive: 22 (primitiveSubtractLargeIntegers)"); return false;
+||||||| constructed merge base
+            case 21: return false;
+            case 22: return false;
+=======
+            case 21: { // primitiveAddLargeIntegers
+                var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
+                if (!this.success) return false;
+                return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(a + b));
+            }
+            case 22: { // primitiveSubtractLargeIntegers
+                var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
+                if (!this.success) return false;
+                return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(a - b));
+            }
+>>>>>>> Stashed changes
             case 23: return this.primitiveLessThanLargeIntegers(argCount);
             case 24: return this.primitiveGreaterThanLargeIntegers(argCount);
             case 25: return this.primitiveLessOrEqualLargeIntegers(argCount);
             case 26: return this.primitiveGreaterOrEqualLargeIntegers(argCount);
             case 27: return this.primitiveEqualLargeIntegers(argCount);
             case 28: return this.primitiveNotEqualLargeIntegers(argCount);
+<<<<<<< Updated upstream
             case 29: this.vm.warnOnce("missing primitive: 29 (primitiveMultiplyLargeIntegers)"); return false;
+||||||| constructed merge base
+            case 29: return false;
+=======
+            case 29: { // primitiveMultiplyLargeIntegers
+                var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
+                if (!this.success) return false;
+                var prod = a * b;
+                if (!Number.isFinite(prod) || Math.abs(prod) > 9007199254740991) return false;
+                return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(prod));
+            }
+>>>>>>> Stashed changes
             case 30: this.vm.warnOnce("missing primitive: 30 (primitiveDivideLargeIntegers)"); return false;
+<<<<<<< Updated upstream
             case 31: this.vm.warnOnce("missing primitive: 31 (primitiveModLargeIntegers)"); return false;
             case 32: this.vm.warnOnce("missing primitive: 32 (primitiveDivLargeIntegers)"); return false;
             case 33: this.vm.warnOnce("missing primitive: 33 (primitiveQuoLargeIntegers)"); return false;
+||||||| constructed merge base
+            case 31: return false;
+            case 32: return false;
+            case 33: return false;
+=======
+            case 31: { // primitiveModLargeIntegers  (a - (a div: b) * b)
+                var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
+                if (!this.success || b === 0) return false;
+                var d = Math.floor(a / b);
+                var r = a - d * b;
+                return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(r));
+            }
+            case 32: { // primitiveDivLargeIntegers  floor division
+                var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
+                if (!this.success || b === 0) return false;
+                var d = Math.floor(a / b);
+                return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(d));
+            }
+            case 33: { // primitiveQuoLargeIntegers  truncate toward zero
+                var a = this.stackSigned53BitInt(1), b = this.stackSigned53BitInt(0);
+                if (!this.success || b === 0) return false;
+                var q = a / b;
+                q = q < 0 ? Math.ceil(q) : Math.floor(q);
+                return this.popNandPushIfOK(argCount+1, this.makeLargeIfNeeded(q));
+            }
+>>>>>>> Stashed changes
             case 34: this.vm.warnOnce("missing primitive: 34 (primitiveBitAndLargeIntegers)"); return false;
             case 35: this.vm.warnOnce("missing primitive: 35 (primitiveBitOrLargeIntegers)"); return false;
             case 36: this.vm.warnOnce("missing primitive: 36 (primitiveBitXorLargeIntegers)"); return false;
@@ -149,9 +204,98 @@ Object.subclass('Squeak.Primitives',
             case 62: return this.popNandPushIfOK(argCount+1, this.objectSize(false)); // size
             case 63: return this.popNandPushIfOK(argCount+1, this.objectAt(false,true,false)); // String.basicAt:
             case 64: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,true,false)); // String.basicAt:put:
+<<<<<<< Updated upstream
             case 65: this.vm.warnOnce("missing primitive: 65 (primitiveNext)"); return false;
             case 66: this.vm.warnOnce("missing primitive: 66 (primitiveNextPut)"); return false;
             case 67: this.vm.warnOnce("missing primitive: 67 (primitiveAtEnd)"); return false;
+||||||| constructed merge base
+            case 65: return false;
+            case 66: return false;
+            case 67: return false;
+=======
+            case 65: { // primitiveNext
+                if (argCount !== 0) return false;
+                var rcvr = this.stackReceiver();
+                var arr = rcvr.pointers[Squeak.Stream_array];
+                var posOop = rcvr.pointers[Squeak.Stream_position];
+                var limOop = rcvr.pointers[Squeak.Stream_limit];
+                if (typeof posOop !== "number" || typeof limOop !== "number" || !arr) return false;
+                var pos = posOop | 0;
+                var lim = limOop | 0;
+                if (pos >= lim) return false;
+                var index = pos + 1; // Smalltalk is 1-based
+                var value;
+                if (arr.isPointers && arr.isPointers()) {
+                    value = arr.pointers[index - 1];
+                } else if (arr.isWords && arr.isWords()) {
+                    value = this.pos32BitIntFor(arr.words[index - 1]);
+                } else if (arr.isBytes && arr.isBytes()) {
+                    if (arr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString])
+                        value = this.charFromInt(arr.bytes[index - 1] & 0xFF);
+                    else
+                        value = arr.bytes[index - 1] & 0xFF;
+                } else {
+                    this.vm.push(arr);
+                    this.vm.push(index);
+                    value = this.objectAt(false, arr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString], false);
+                    if (!this.success) return false;
+                    this.vm.pop(); // remove index
+                    this.vm.pop(); // remove array
+                }
+                rcvr.pointers[Squeak.Stream_position] = pos + 1;
+                return this.popNandPushIfOK(argCount + 1, value);
+            }
+            case 66: { // primitiveNextPut:
+                if (argCount !== 1) return false;
+                var value = this.vm.top();
+                var rcvr = this.stackReceiver();
+                var arr = rcvr.pointers[Squeak.Stream_array];
+                var posOop = rcvr.pointers[Squeak.Stream_position];
+                var limOop = rcvr.pointers[Squeak.Stream_limit];
+                if (typeof posOop !== "number" || typeof limOop !== "number" || !arr) return false;
+                var pos = posOop | 0;
+                var lim = limOop | 0;
+                if (pos >= lim) return false;
+                var index = pos + 1;
+                if (arr.isPointers && arr.isPointers()) {
+                    arr.pointers[index - 1] = value;
+                    arr.dirty = true;
+                } else if (arr.isWords && arr.isWords()) {
+                    var w = this.stackSigned32BitInt(0); // may fail if not int
+                    if (!this.success) { this.success = true; return false; }
+                    arr.words[index - 1] = w;
+                } else if (arr.isBytes && arr.isBytes()) {
+                    var byte;
+                    if (value && value.sqClass === this.vm.specialObjects[Squeak.splOb_ClassCharacter]) {
+                        byte = this.charToInt(value) & 0xFF;
+                    } else if (typeof value === "number") {
+                        if (value < 0 || value > 255) return false;
+                        byte = value & 0xFF;
+                    } else {
+                        return false;
+                    }
+                    arr.bytes[index - 1] = byte;
+                } else {
+                    this.vm.push(arr);
+                    this.vm.push(index);
+                    this.vm.push(value);
+                    var res = this.objectAtPut(false, arr.sqClass === this.vm.specialObjects[Squeak.splOb_ClassString], false);
+                    if (!this.success) return false;
+                    this.vm.pop(); this.vm.pop(); this.vm.pop();
+                }
+                rcvr.pointers[Squeak.Stream_position] = pos + 1;
+                return this.popNandPushIfOK(argCount + 1, value);
+            }
+            case 67: { // primitiveAtEnd
+                if (argCount !== 0) return false;
+                var rcvr = this.stackReceiver();
+                var posOop = rcvr.pointers[Squeak.Stream_position];
+                var limOop = rcvr.pointers[Squeak.Stream_limit];
+                if (typeof posOop !== "number" || typeof limOop !== "number") return false;
+                var atEnd = (posOop | 0) >= (limOop | 0);
+                return this.popNandPushIfOK(argCount + 1, atEnd ? this.vm.trueObj : this.vm.falseObj);
+            }
+>>>>>>> Stashed changes
             // StorageManagement Primitives (68-79)
             case 68: return this.popNandPushIfOK(argCount+1, this.objectAt(false,false,true)); // Method.objectAt:
             case 69: return this.popNandPushIfOK(argCount+1, this.objectAtPut(false,false,true)); // Method.objectAt:put:
