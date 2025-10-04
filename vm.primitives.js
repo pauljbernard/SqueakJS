@@ -1036,9 +1036,26 @@ Object.subclass('Squeak.Primitives',
         return this.vm.canBeSmallInt(integer) ? integer : this.makeLargeInt(integer);
     },
     makeLargeInt: function(integer) {
-        if (integer < 0) throw Error("negative large ints not implemented yet");
-        if (integer > 0xFFFFFFFF) throw Error("large large ints not implemented yet");
-        return this.pos32BitIntFor(integer);
+        var isNeg = integer < 0;
+        var mag = Math.abs(integer);
+        if (!Number.isFinite(mag)) { this.success = false; return 0; }
+        if (mag === 0) {
+            var zeroCls = this.vm.specialObjects[isNeg ? Squeak.splOb_ClassLargeNegativeInteger : Squeak.splOb_ClassLargePositiveInteger];
+            var zeroObj = this.vm.instantiateClass(zeroCls, 1);
+            zeroObj.bytes[0] = 0;
+            return zeroObj;
+        }
+        if (mag > Number.MAX_SAFE_INTEGER) { this.success = false; return 0; }
+        var tmp = mag, len = 0;
+        while (tmp > 0) { len++; tmp = Math.floor(tmp / 256); }
+        var klass = this.vm.specialObjects[isNeg ? Squeak.splOb_ClassLargeNegativeInteger : Squeak.splOb_ClassLargePositiveInteger];
+        var li = this.vm.instantiateClass(klass, len);
+        var v = mag;
+        for (var i = 0; i < len; i++) {
+            li.bytes[i] = v & 0xFF;
+            v = Math.floor(v / 256);
+        }
+        return li;
     },
     makePointWithXandY: function(x, y) {
         var pointClass = this.vm.specialObjects[Squeak.splOb_ClassPoint];
