@@ -962,7 +962,12 @@ Object.subclass('Squeak.Interpreter',
         return this.characterFromCodePoint(receiver);
     },
     shouldCoerceSmallIntegerSelector: function(selectorName) {
-        return selectorName === "isSeparator";
+        switch (selectorName) {
+            case "isSeparator":
+            case "isAlphaNumeric":
+                return true;
+        }
+        return false;
     },
     characterFromCodePoint: function(codePoint) {
         if (codePoint == null) return null;
