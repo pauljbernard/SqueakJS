@@ -2,6 +2,7 @@
 const http = require('http');
 const path = require('path');
 const net = require('net');
+const tls = require('tls');
 
 const LOG_TUNNEL = !!process.env.LOG_TUNNEL;
 function logTunnel() { if (LOG_TUNNEL) console.log("[TCP-TUNNEL]", ...arguments); }
@@ -119,11 +120,28 @@ function attachTcpTunnel(server, options = {}) {
         return;
       }
 
-      sock = net.connect({ host, port }, () => {
+      const tlsPreference = typeof m.tls === 'boolean' ? m.tls : (port === 443);
+      const tlsServername = typeof m.s === 'string' && m.s.length ? m.s : host;
+      const connectOpts = { host, port };
+      const onConnected = () => {
         connected = true;
-        logTunnel("tcp connected", { host, port });
+        try { sock.setNoDelay(true); } catch(_) {}
+        try { sock.setKeepAlive(true, 15000); } catch(_) {}
+        logTunnel("tcp connected", { host, port, tls: tlsPreference });
         try { ws.send(JSON.stringify({ t: 'ok' })); } catch(e) {}
-      });
+      };
+      try {
+        if (tlsPreference) {
+          sock = tls.connect(Object.assign({ servername: tlsServername }, connectOpts), onConnected);
+        } else {
+          sock = net.connect(connectOpts, onConnected);
+        }
+      } catch (connectErr) {
+        errTunnel("tcp connect failed", connectErr && (connectErr.stack || connectErr.message || connectErr));
+        try { ws.send(JSON.stringify({ t: 'err', code: 500, msg: 'socket error' })); } catch(_) {}
+        try { ws.close(); } catch(_) {}
+        return;
+      }
 
       sock.on('data', (data) => {
         tcpBytes += data.length || 0;
@@ -326,12 +344,15 @@ function attachTcpTunnelNoServer(server, options = {}) {
           return;
         }
 
-        sock = net.connect({ host, port, allowHalfOpen: true }, () => {
+        const tlsPreference = typeof m.tls === 'boolean' ? m.tls : (port === 443);
+        const tlsServername = typeof m.s === 'string' && m.s.length ? m.s : host;
+        const connectOpts = { host, port, allowHalfOpen: true };
+        const onConnected = () => {
           connected = true;
           clearHandshakeTimer();
           try { sock.setNoDelay(true); } catch(_) {}
           try { sock.setKeepAlive(true, 15000); } catch(_) {}
-          logTunnel("tcp connected", { host, port });
+          logTunnel("tcp connected", { host, port, tls: tlsPreference });
           try { ws.send(JSON.stringify({ t: 'ok' })); } catch(e) {}
           if (preConnectQueue.length && sock && !sock.destroyed) {
             for (const b of preConnectQueue) {
@@ -341,7 +362,22 @@ function attachTcpTunnelNoServer(server, options = {}) {
             preConnectQueue = [];
             preConnectBytes = 0;
           }
-        });
+        };
+        try {
+          if (tlsPreference) {
+            sock = tls.connect(Object.assign({ servername: tlsServername }, connectOpts), onConnected);
+          } else {
+            sock = net.connect(connectOpts, onConnected);
+          }
+        } catch (connectErr) {
+          clearHandshakeTimer();
+          errTunnel("tcp connect failed", connectErr && (connectErr.stack || connectErr.message || connectErr));
+          if (ws.readyState === WebSocket.OPEN) {
+            try { ws.send(JSON.stringify({ t: 'err', code: 500, msg: 'socket error' })); } catch(_) {}
+          }
+          try { ws.close(); } catch(_) {}
+          return;
+        }
 
         sock.on('data', (data) => {
           tcpBytes += data.length || 0;
